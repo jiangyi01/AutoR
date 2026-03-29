@@ -1,0 +1,608 @@
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+
+@dataclass(frozen=True)
+class StageSpec:
+    number: int
+    slug: str
+    display_name: str
+
+    @property
+    def filename(self) -> str:
+        return f"{self.slug}.md"
+
+    @property
+    def stage_title(self) -> str:
+        return f"Stage {self.number:02d}: {self.display_name}"
+
+
+@dataclass(frozen=True)
+class RunPaths:
+    run_root: Path
+    user_input: Path
+    memory: Path
+    logs: Path
+    logs_raw: Path
+    prompt_cache_dir: Path
+    stages_dir: Path
+    workspace_root: Path
+    literature_dir: Path
+    code_dir: Path
+    data_dir: Path
+    results_dir: Path
+    writing_dir: Path
+    figures_dir: Path
+    artifacts_dir: Path
+    notes_dir: Path
+    reviews_dir: Path
+
+    def stage_file(self, stage: StageSpec) -> Path:
+        return self.stages_dir / stage.filename
+
+    def stage_tmp_file(self, stage: StageSpec) -> Path:
+        return self.stages_dir / f"{stage.slug}.tmp.md"
+
+
+@dataclass(frozen=True)
+class OperatorResult:
+    success: bool
+    exit_code: int
+    stdout: str
+    stderr: str
+    stage_file_path: Path
+
+
+STAGES: list[StageSpec] = [
+    StageSpec(1, "01_literature_survey", "Literature Survey"),
+    StageSpec(2, "02_hypothesis_generation", "Hypothesis Generation"),
+    StageSpec(3, "03_study_design", "Study Design"),
+    StageSpec(4, "04_implementation", "Implementation"),
+    StageSpec(5, "05_experimentation", "Experimentation"),
+    StageSpec(6, "06_analysis", "Analysis"),
+    StageSpec(7, "07_writing", "Writing"),
+    StageSpec(8, "08_dissemination", "Dissemination"),
+]
+
+REQUIRED_STAGE_HEADINGS = [
+    "Objective",
+    "Previously Approved Stage Summaries",
+    "What I Did",
+    "Key Results",
+    "Files Produced",
+    "Suggestions for Refinement",
+    "Your Options",
+]
+
+FIXED_STAGE_OPTIONS = [
+    "1. Use suggestion 1",
+    "2. Use suggestion 2",
+    "3. Use suggestion 3",
+    "4. Refine with your own feedback",
+    "5. Approve and continue",
+    "6. Abort",
+]
+
+DEFAULT_REFINEMENT_SUGGESTIONS = [
+    "Tighten the scope or decision criteria for this stage before continuing.",
+    "Strengthen the evidence quality, artifacts, or justification produced in this stage.",
+    "Clarify the main risks, assumptions, and next-step implications before continuing.",
+]
+
+PLACEHOLDER_PATTERNS = [
+    r"\[in progress[^\]]*\]",
+    r"\[pending[^\]]*\]",
+    r"\[todo[^\]]*\]",
+    r"\[tbd[^\]]*\]",
+    r"\[to be determined[^\]]*\]",
+    r"\[placeholder[^\]]*\]",
+    r"\[to be populated[^\]]*\]",
+]
+
+
+def create_run_root(runs_dir: Path) -> Path:
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    base = datetime.now().strftime("%Y%m%d_%H%M%S")
+    candidate = runs_dir / base
+    counter = 1
+
+    while candidate.exists():
+        candidate = runs_dir / f"{base}_{counter:02d}"
+        counter += 1
+
+    return candidate
+
+
+def build_run_paths(run_root: Path) -> RunPaths:
+    workspace_root = run_root / "workspace"
+    return RunPaths(
+        run_root=run_root,
+        user_input=run_root / "user_input.txt",
+        memory=run_root / "memory.md",
+        logs=run_root / "logs.txt",
+        logs_raw=run_root / "logs_raw.jsonl",
+        prompt_cache_dir=run_root / "prompt_cache",
+        stages_dir=run_root / "stages",
+        workspace_root=workspace_root,
+        literature_dir=workspace_root / "literature",
+        code_dir=workspace_root / "code",
+        data_dir=workspace_root / "data",
+        results_dir=workspace_root / "results",
+        writing_dir=workspace_root / "writing",
+        figures_dir=workspace_root / "figures",
+        artifacts_dir=workspace_root / "artifacts",
+        notes_dir=workspace_root / "notes",
+        reviews_dir=workspace_root / "reviews",
+    )
+
+
+def ensure_run_layout(paths: RunPaths) -> None:
+    paths.run_root.mkdir(parents=True, exist_ok=True)
+    paths.prompt_cache_dir.mkdir(parents=True, exist_ok=True)
+    paths.stages_dir.mkdir(parents=True, exist_ok=True)
+    paths.workspace_root.mkdir(parents=True, exist_ok=True)
+
+    for directory in workspace_dirs(paths):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    for file_path in (paths.user_input, paths.memory, paths.logs, paths.logs_raw):
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.touch(exist_ok=True)
+
+
+def workspace_dirs(paths: RunPaths) -> list[Path]:
+    return [
+        paths.literature_dir,
+        paths.code_dir,
+        paths.data_dir,
+        paths.results_dir,
+        paths.writing_dir,
+        paths.figures_dir,
+        paths.artifacts_dir,
+        paths.notes_dir,
+        paths.reviews_dir,
+    ]
+
+
+def write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text.rstrip() + "\n", encoding="utf-8")
+
+
+def read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def append_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(text)
+
+
+def append_log_entry(log_path: Path, heading: str, body: str) -> None:
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    entry = f"\n=== {timestamp} | {heading} ===\n{body.rstrip()}\n"
+    append_text(log_path, entry)
+
+
+def append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    append_text(path, json.dumps(payload, ensure_ascii=True) + "\n")
+
+
+def initialize_memory(paths: RunPaths, user_goal: str) -> None:
+    memory = (
+        "# Approved Run Memory\n\n"
+        "## Original User Goal\n"
+        f"{user_goal.strip()}\n\n"
+        "## Approved Stage Summaries\n\n"
+        "_None yet._\n"
+    )
+    write_text(paths.memory, memory)
+
+
+def load_prompt_template(prompt_dir: Path, stage: StageSpec) -> str:
+    template_path = prompt_dir / stage.filename
+    if not template_path.exists():
+        raise FileNotFoundError(f"Missing prompt template: {template_path}")
+    return read_text(template_path)
+
+
+def format_stage_template(template: str, stage: StageSpec, paths: RunPaths) -> str:
+    replacements = {
+        "{{STAGE_NUMBER}}": f"{stage.number:02d}",
+        "{{STAGE_SLUG}}": stage.slug,
+        "{{STAGE_NAME}}": stage.display_name,
+        "{{RUN_ROOT}}": str(paths.run_root.resolve()),
+        "{{USER_INPUT_PATH}}": str(paths.user_input.resolve()),
+        "{{MEMORY_PATH}}": str(paths.memory.resolve()),
+        "{{LOGS_PATH}}": str(paths.logs.resolve()),
+        "{{LOGS_RAW_PATH}}": str(paths.logs_raw.resolve()),
+        "{{STAGE_OUTPUT_PATH}}": str(paths.stage_tmp_file(stage).resolve()),
+        "{{STAGE_FINAL_OUTPUT_PATH}}": str(paths.stage_file(stage).resolve()),
+        "{{WORKSPACE_ROOT}}": str(paths.workspace_root.resolve()),
+        "{{WORKSPACE_LITERATURE_DIR}}": str(paths.literature_dir.resolve()),
+        "{{WORKSPACE_CODE_DIR}}": str(paths.code_dir.resolve()),
+        "{{WORKSPACE_DATA_DIR}}": str(paths.data_dir.resolve()),
+        "{{WORKSPACE_RESULTS_DIR}}": str(paths.results_dir.resolve()),
+        "{{WORKSPACE_WRITING_DIR}}": str(paths.writing_dir.resolve()),
+        "{{WORKSPACE_FIGURES_DIR}}": str(paths.figures_dir.resolve()),
+        "{{WORKSPACE_ARTIFACTS_DIR}}": str(paths.artifacts_dir.resolve()),
+        "{{WORKSPACE_NOTES_DIR}}": str(paths.notes_dir.resolve()),
+        "{{WORKSPACE_REVIEWS_DIR}}": str(paths.reviews_dir.resolve()),
+    }
+
+    formatted = template
+    for placeholder, value in replacements.items():
+        formatted = formatted.replace(placeholder, value)
+    return formatted
+
+
+def required_stage_output_template(stage: StageSpec) -> str:
+    return (
+        f"# Stage {stage.number:02d}: {stage.display_name}\n\n"
+        "## Objective\n"
+        "[State the exact objective of this stage.]\n\n"
+        "## Previously Approved Stage Summaries\n"
+        "[Summarize approved earlier stages from memory, or write _None yet._]\n\n"
+        "## What I Did\n"
+        "[Describe what you actually did in this stage.]\n\n"
+        "## Key Results\n"
+        "[Present the main results, findings, conclusions, or concrete outputs for this stage.]\n\n"
+        "## Files Produced\n"
+        "- `[relative/path]` - [what it contains]\n\n"
+        "## Suggestions for Refinement\n"
+        "1. [Suggestion 1]\n"
+        "2. [Suggestion 2]\n"
+        "3. [Suggestion 3]\n\n"
+        "## Your Options\n"
+        + "\n".join(FIXED_STAGE_OPTIONS)
+    )
+
+
+def build_prompt(
+    stage: StageSpec,
+    stage_template: str,
+    user_request: str,
+    approved_memory: str,
+    revision_feedback: str | None,
+) -> str:
+    sections = [
+        "# Stage Instructions",
+        stage_template.strip(),
+        "# Required Stage Summary Format",
+        (
+            "You must create or overwrite the stage summary markdown file using exactly the "
+            "top-level heading order below. Do not omit any section. Use exactly 3 numbered "
+            "refinement suggestions and exactly the fixed 6 option lines."
+        ),
+        "```md\n" + required_stage_output_template(stage).strip() + "\n```",
+        "# Execution Discipline",
+        (
+            "1. The stage output path is a temporary draft path for the current attempt, not the final approved stage file.\n"
+            "2. The final approved stage file will be promoted separately by the workflow manager after validation.\n"
+            "3. Do not write half-finished, in-progress, placeholder, outline-only, or pending content to the stage output file.\n"
+            "4. If you need scratch work, drafts, notes, or temporary checkpoints, write them under the workspace directories instead of the stage output file.\n"
+            "5. Only write or overwrite the stage output file once you are ready to produce a complete stage summary for the current attempt.\n"
+            "6. If any tool, search, or subtask fails, still finish the stage by writing the best complete summary you can, clearly marking limitations in prose rather than leaving placeholders.\n"
+            "7. Read the stage output file back before finishing and verify every required heading is present and fully filled.\n"
+            "8. Do not leave placeholder text such as [In progress], [Pending], [TODO], [TBD], or similar unfinished in the final file.\n"
+            "9. Never leave the stage without a valid stage summary markdown file at the temporary output path."
+        ),
+        "# Original User Request",
+        user_request.strip(),
+        "# Approved Memory",
+        approved_memory.strip() or "_None yet._",
+        "# Revision Feedback",
+        revision_feedback.strip() if revision_feedback else "None.",
+    ]
+    return "\n\n".join(sections).strip() + "\n"
+
+
+def truncate_text(text: str, max_chars: int = 12000) -> str:
+    stripped = text.strip()
+    if len(stripped) <= max_chars:
+        return stripped
+    return stripped[: max_chars - 3].rstrip() + "..."
+
+
+def extract_markdown_section(markdown: str, heading: str) -> str | None:
+    pattern = re.compile(
+        rf"^## {re.escape(heading)}\s*$\n?(.*?)(?=^## |\Z)",
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    match = pattern.search(markdown)
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def parse_numbered_list(section_text: str) -> dict[int, str]:
+    items: dict[int, str] = {}
+    current_id: int | None = None
+    current_lines: list[str] = []
+
+    for raw_line in section_text.splitlines():
+        line = raw_line.rstrip()
+        match = re.match(r"^\s*(\d+)\.\s+(.*)$", line)
+        if match:
+            if current_lines and current_id is not None:
+                items[current_id] = " ".join(current_lines).strip()
+            current_id = int(match.group(1))
+            current_lines = [match.group(2).strip()]
+            continue
+
+        if current_lines and line.strip():
+            current_lines.append(line.strip())
+
+    if current_lines and current_id is not None:
+        items[current_id] = " ".join(current_lines).strip()
+
+    return items
+
+
+def parse_refinement_suggestions(markdown: str) -> list[str]:
+    section = extract_markdown_section(markdown, "Suggestions for Refinement")
+    if section is None:
+        raise ValueError("Missing 'Suggestions for Refinement' section.")
+
+    items = parse_numbered_list(section)
+    missing = [number for number in (1, 2, 3) if number not in items]
+    if missing:
+        raise ValueError(f"Missing refinement suggestion(s): {missing}")
+
+    return [items[1], items[2], items[3]]
+
+
+def contains_placeholder_text(text: str) -> bool:
+    lowered = text.lower()
+    return any(re.search(pattern, lowered) for pattern in PLACEHOLDER_PATTERNS)
+
+
+def validate_stage_markdown(markdown: str) -> list[str]:
+    problems: list[str] = []
+
+    if not markdown.startswith("# Stage "):
+        problems.append("Stage markdown must begin with '# Stage '.")
+
+    for heading in REQUIRED_STAGE_HEADINGS:
+        section = extract_markdown_section(markdown, heading)
+        if section is None:
+            problems.append(f"Missing required section: {heading}")
+            continue
+
+        if contains_placeholder_text(section):
+            problems.append(f"Section '{heading}' still contains placeholder text.")
+
+        if heading == "Files Produced":
+            listed_files = _extract_path_references(section)
+            if not listed_files:
+                problems.append("Section 'Files Produced' must list at least one concrete file path.")
+
+    options_section = extract_markdown_section(markdown, "Your Options")
+    if options_section is not None:
+        option_items = parse_numbered_list(options_section)
+        for number in range(1, 7):
+            if number not in option_items:
+                problems.append(f"Missing option {number} in 'Your Options'.")
+
+    try:
+        suggestions = parse_refinement_suggestions(markdown)
+        if len(suggestions) != 3:
+            problems.append("Expected exactly 3 refinement suggestions.")
+        for index, suggestion in enumerate(suggestions, start=1):
+            if contains_placeholder_text(suggestion):
+                problems.append(
+                    f"Suggestion {index} in 'Suggestions for Refinement' still contains placeholder text."
+                )
+    except ValueError as exc:
+        problems.append(str(exc))
+
+    return problems
+
+
+def render_approved_stage_entry(stage: StageSpec, stage_markdown: str) -> str:
+    objective = extract_markdown_section(stage_markdown, "Objective") or "Not provided."
+    what_i_did = extract_markdown_section(stage_markdown, "What I Did") or "Not provided."
+    key_results = extract_markdown_section(stage_markdown, "Key Results") or "Not provided."
+    files_produced = extract_markdown_section(stage_markdown, "Files Produced") or "Not provided."
+
+    return (
+        f"### {stage.stage_title}\n\n"
+        "#### Objective\n"
+        f"{objective}\n\n"
+        "#### What I Did\n"
+        f"{what_i_did}\n\n"
+        "#### Key Results\n"
+        f"{key_results}\n\n"
+        "#### Files Produced\n"
+        f"{files_produced}"
+    )
+
+
+def append_approved_stage_summary(memory_path: Path, stage: StageSpec, stage_markdown: str) -> None:
+    current = read_text(memory_path)
+    entry = render_approved_stage_entry(stage, stage_markdown)
+
+    placeholder = "_None yet._"
+    if placeholder in current:
+        updated = current.replace(placeholder, entry, 1)
+    else:
+        updated = current.rstrip() + "\n\n" + entry + "\n"
+
+    write_text(memory_path, updated)
+
+
+def approved_stage_summaries(memory_text: str) -> str:
+    marker = "## Approved Stage Summaries"
+    if marker not in memory_text:
+        return "None yet."
+    content = memory_text.split(marker, 1)[1].strip()
+    if not content or content == "_None yet._":
+        return "None yet."
+    return content
+
+
+def _extract_loose_list_items(section_text: str) -> list[str]:
+    items: list[str] = []
+
+    for raw_line in section_text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+
+        numbered_match = re.match(r"^\d+\.\s+(.*)$", stripped)
+        if numbered_match:
+            items.append(numbered_match.group(1).strip())
+            continue
+
+        bullet_match = re.match(r"^[-*]\s+(.*)$", stripped)
+        if bullet_match:
+            items.append(bullet_match.group(1).strip())
+
+    return items
+
+
+def _extract_path_references(text: str) -> list[str]:
+    seen: set[str] = set()
+    paths: list[str] = []
+
+    for candidate in re.findall(r"`([^`]+)`", text):
+        normalized = candidate.strip()
+        if not normalized:
+            continue
+
+        if not (
+            normalized.startswith("workspace/")
+            or normalized.startswith("stages/")
+            or normalized.startswith("prompt_cache/")
+            or "/" in normalized
+        ):
+            continue
+
+        if normalized in seen:
+            continue
+
+        seen.add(normalized)
+        paths.append(normalized)
+
+    return paths
+
+
+def canonicalize_stage_markdown(
+    stage: StageSpec,
+    memory_text: str,
+    markdown: str,
+    fallback_text: str = "",
+) -> str:
+    objective = (
+        extract_markdown_section(markdown, "Objective")
+        or f"Complete {stage.stage_title} and capture the main objective, work performed, results, and produced artifacts."
+    )
+
+    previous_summaries = extract_markdown_section(markdown, "Previously Approved Stage Summaries")
+    if not previous_summaries:
+        approved = approved_stage_summaries(memory_text)
+        previous_summaries = "_None yet._" if approved == "None yet." else approved
+
+    what_i_did = extract_markdown_section(markdown, "What I Did")
+    if not what_i_did:
+        what_i_did = (
+            "This stage summary was normalized locally because the Claude-generated markdown was incomplete. "
+            "Review the current workspace artifacts and captured terminal output before approval."
+        )
+
+    key_results = extract_markdown_section(markdown, "Key Results")
+    if not key_results:
+        fallback_excerpt = truncate_text(fallback_text, max_chars=1600) if fallback_text.strip() else ""
+        key_results = (
+            "The original stage output was incomplete, so this file was normalized locally to preserve workflow continuity."
+        )
+        if fallback_excerpt:
+            key_results += (
+                "\n\nRecovered execution context (truncated):\n"
+                f"```\n{fallback_excerpt}\n```"
+            )
+
+    files_produced = extract_markdown_section(markdown, "Files Produced")
+    if not files_produced:
+        file_refs = _extract_path_references(markdown + "\n" + fallback_text)
+        stage_path = f"stages/{stage.filename}"
+        if stage_path not in file_refs:
+            file_refs.insert(0, stage_path)
+        files_produced = "\n".join(f"- `{path}`" for path in file_refs[:12]) if file_refs else f"- `{stage_path}`"
+
+    suggestions_section = extract_markdown_section(markdown, "Suggestions for Refinement") or ""
+    numbered_suggestions = parse_numbered_list(suggestions_section)
+    suggestion_items = [numbered_suggestions[key] for key in sorted(numbered_suggestions)] if numbered_suggestions else []
+    if not suggestion_items:
+        suggestion_items = _extract_loose_list_items(suggestions_section)
+    if not suggestion_items:
+        suggestion_items = list(DEFAULT_REFINEMENT_SUGGESTIONS)
+
+    for default_suggestion in DEFAULT_REFINEMENT_SUGGESTIONS:
+        if len(suggestion_items) >= 3:
+            break
+        if default_suggestion not in suggestion_items:
+            suggestion_items.append(default_suggestion)
+
+    suggestion_items = suggestion_items[:3]
+
+    return (
+        f"# Stage {stage.number:02d}: {stage.display_name}\n\n"
+        "## Objective\n\n"
+        f"{objective.strip()}\n\n"
+        "## Previously Approved Stage Summaries\n\n"
+        f"{previous_summaries.strip()}\n\n"
+        "## What I Did\n\n"
+        f"{what_i_did.strip()}\n\n"
+        "## Key Results\n\n"
+        f"{key_results.strip()}\n\n"
+        "## Files Produced\n\n"
+        f"{files_produced.strip()}\n\n"
+        "## Suggestions for Refinement\n"
+        f"1. {suggestion_items[0].strip()}\n"
+        f"2. {suggestion_items[1].strip()}\n"
+        f"3. {suggestion_items[2].strip()}\n\n"
+        "## Your Options\n"
+        + "\n".join(FIXED_STAGE_OPTIONS)
+        + "\n"
+    )
+
+
+def extract_stream_text_fragments(payload: Any) -> list[str]:
+    fragments: list[str] = []
+
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_lower = key.lower()
+            if isinstance(value, str) and key_lower in {
+                "text",
+                "content",
+                "message",
+                "delta",
+                "summary",
+                "result",
+            }:
+                text = value.strip()
+                if text:
+                    fragments.append(text)
+            else:
+                fragments.extend(extract_stream_text_fragments(value))
+    elif isinstance(payload, list):
+        for item in payload:
+            fragments.extend(extract_stream_text_fragments(item))
+
+    return fragments
+
+
+def relative_to_run(path: Path, run_root: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(run_root.resolve()))
+    except ValueError:
+        return str(path.resolve())
