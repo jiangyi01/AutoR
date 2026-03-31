@@ -39,6 +39,7 @@ class RunPaths:
     prompt_cache_dir: Path
     operator_state_dir: Path
     stages_dir: Path
+    handoff_dir: Path
     workspace_root: Path
     literature_dir: Path
     code_dir: Path
@@ -155,6 +156,7 @@ def build_run_paths(run_root: Path) -> RunPaths:
         prompt_cache_dir=run_root / "prompt_cache",
         operator_state_dir=run_root / "operator_state",
         stages_dir=run_root / "stages",
+        handoff_dir=run_root / "handoff",
         workspace_root=workspace_root,
         literature_dir=workspace_root / "literature",
         code_dir=workspace_root / "code",
@@ -173,6 +175,7 @@ def ensure_run_layout(paths: RunPaths) -> None:
     paths.prompt_cache_dir.mkdir(parents=True, exist_ok=True)
     paths.operator_state_dir.mkdir(parents=True, exist_ok=True)
     paths.stages_dir.mkdir(parents=True, exist_ok=True)
+    paths.handoff_dir.mkdir(parents=True, exist_ok=True)
     paths.workspace_root.mkdir(parents=True, exist_ok=True)
 
     for directory in workspace_dirs(paths):
@@ -387,6 +390,7 @@ def build_prompt(
     stage_template: str,
     user_request: str,
     approved_memory: str,
+    handoff_context: str,
     revision_feedback: str | None,
 ) -> str:
     sections = [
@@ -415,6 +419,8 @@ def build_prompt(
         user_request.strip(),
         "# Approved Memory",
         approved_memory.strip() or "_None yet._",
+        "# Stage Handoff Context",
+        handoff_context.strip() or "No stage handoff summaries available yet.",
         "# Revision Feedback",
         revision_feedback.strip() if revision_feedback else "None.",
     ]
@@ -425,6 +431,7 @@ def build_continuation_prompt(
     stage: StageSpec,
     stage_template: str,
     paths: RunPaths,
+    handoff_context: str,
     revision_feedback: str | None,
 ) -> str:
     current_draft = paths.stage_tmp_file(stage)
@@ -450,6 +457,7 @@ def build_continuation_prompt(
             f"1. Read the current draft at `{current_draft.resolve()}` if it exists.\n"
             f"2. Read the last promoted stage summary at `{current_final.resolve()}` if it exists.\n"
             f"3. Read approved memory from `{paths.memory.resolve()}` and the original user goal from `{paths.user_input.resolve()}` if needed.\n"
+            f"4. Read prior handoff summaries under `{paths.handoff_dir.resolve()}` when they exist.\n"
             f"4. Treat workspace artifacts already under `{paths.workspace_root.resolve()}` as part of the current stage context and reuse them.\n"
             "5. Preserve all valid work already completed in this stage unless the new feedback requires changing it.\n"
             "6. Fill the missing pieces, fix weak points, and update the stage summary instead of throwing away correct work.\n"
@@ -457,6 +465,8 @@ def build_continuation_prompt(
             "8. Do not leave placeholder text such as [In progress], [Pending], [TODO], [TBD], or similar unfinished markers.\n"
             "9. If the existing stage work is partially correct, keep the correct parts and extend them rather than replacing them blindly."
         ),
+        "# Stage Handoff Context",
+        handoff_context.strip() or "No stage handoff summaries available yet.",
         "# New Feedback",
         revision_feedback.strip()
         if revision_feedback
@@ -721,6 +731,35 @@ def extract_path_references(text: str) -> list[str]:
         paths.append(normalized)
 
     return paths
+
+
+def write_stage_handoff(paths: RunPaths, stage: StageSpec, stage_markdown: str) -> Path:
+    handoff_path = paths.handoff_dir / f"{stage.slug}.md"
+    objective = extract_markdown_section(stage_markdown, "Objective") or "Not provided."
+    key_results = extract_markdown_section(stage_markdown, "Key Results") or "Not provided."
+    files_produced = extract_markdown_section(stage_markdown, "Files Produced") or "Not provided."
+    write_text(
+        handoff_path,
+        (
+            f"# Handoff: {stage.stage_title}\n\n"
+            "## Objective\n"
+            f"{objective}\n\n"
+            "## Key Results\n"
+            f"{key_results}\n\n"
+            "## Files Produced\n"
+            f"{files_produced}\n"
+        ),
+    )
+    return handoff_path
+
+
+def build_handoff_context(paths: RunPaths, upto_stage: StageSpec | None = None, max_stages: int = 4) -> str:
+    handoffs = sorted(path for path in paths.handoff_dir.glob("*.md") if path.is_file())
+    if upto_stage is not None:
+        handoffs = [path for path in handoffs if path.stem < upto_stage.slug]
+    handoffs = handoffs[-max_stages:]
+    parts = [read_text(path).strip() for path in handoffs if path.exists()]
+    return "\n\n".join(parts).strip() or "No stage handoff summaries available yet."
 
 
 def _extract_path_references(text: str) -> list[str]:

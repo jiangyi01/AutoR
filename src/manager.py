@@ -28,6 +28,7 @@ from .utils import (
     StageSpec,
     append_approved_stage_summary,
     append_log_entry,
+    build_handoff_context,
     build_continuation_prompt,
     build_prompt,
     build_run_paths,
@@ -45,6 +46,7 @@ from .utils import (
     truncate_text,
     validate_stage_artifacts,
     validate_stage_markdown,
+    write_stage_handoff,
     write_text,
 )
 
@@ -415,6 +417,7 @@ class ResearchManager:
                     attempt_no,
                     self._stage_file_paths(stage_markdown),
                 )
+                write_stage_handoff(paths, stage, stage_markdown)
                 append_log_entry(
                     paths.logs,
                     f"{stage.slug} approved",
@@ -441,6 +444,7 @@ class ResearchManager:
     ) -> str:
         template = load_prompt_template(self.prompt_dir, stage)
         stage_template = format_stage_template(template, stage, paths)
+        handoff_context = build_handoff_context(paths, upto_stage=stage)
         stage_template = (
             stage_template.rstrip()
             + "\n\n## Run Configuration\n\n"
@@ -456,11 +460,11 @@ class ResearchManager:
                 + "\n"
             )
         if continue_session:
-            return build_continuation_prompt(stage, stage_template, paths, revision_feedback)
+            return build_continuation_prompt(stage, stage_template, paths, handoff_context, revision_feedback)
 
         user_request = read_text(paths.user_input)
         approved_memory = read_text(paths.memory)
-        return build_prompt(stage, stage_template, user_request, approved_memory, revision_feedback)
+        return build_prompt(stage, stage_template, user_request, approved_memory, handoff_context, revision_feedback)
 
     def _display_stage_output(self, stage: StageSpec, markdown: str) -> None:
         divider = "=" * 80
