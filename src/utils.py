@@ -59,6 +59,12 @@ class RunPaths:
     def stage_session_file(self, stage: StageSpec) -> Path:
         return self.operator_state_dir / f"{stage.slug}.session_id.txt"
 
+    def stage_session_state_file(self, stage: StageSpec) -> Path:
+        return self.operator_state_dir / f"{stage.slug}.session.json"
+
+    def stage_attempt_state_file(self, stage: StageSpec, attempt_no: int) -> Path:
+        return self.operator_state_dir / f"{stage.slug}.attempt_{attempt_no:02d}.json"
+
 
 @dataclass(frozen=True)
 class OperatorResult:
