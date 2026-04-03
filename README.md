@@ -510,4 +510,4 @@ Join the project community channels:
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=HavenIntelligence/AutoR&type=Date)](https://star-history.com/#HavenIntelligence/AutoR&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=AutoX-AI-Labs/AutoR&type=Date)](https://star-history.com/#AutoX-AI-Labs/AutoR&Date)
