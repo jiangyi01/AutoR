@@ -21,7 +21,7 @@ from .manifest import (
     update_manifest_run_status,
 )
 from .operator import ClaudeOperator
-from .terminal_ui import TerminalUI
+from .platform.foundry import generate_paper_package
 from .writing_manifest import build_writing_manifest, format_manifest_for_prompt
 from .utils import (
     STAGES,
@@ -30,6 +30,7 @@ from .utils import (
     append_approved_stage_summary,
     approved_stage_numbers,
     append_log_entry,
+    build_handoff_context,
     build_continuation_prompt,
     build_prompt,
     build_run_paths,
@@ -49,6 +50,7 @@ from .utils import (
     truncate_text,
     validate_stage_artifacts,
     validate_stage_markdown,
+    write_stage_handoff,
     write_text,
 )
 
@@ -440,6 +442,14 @@ class ResearchManager:
                     attempt_no,
                     self._stage_file_paths(stage_markdown),
                 )
+                if stage.slug == "07_writing":
+                    package = generate_paper_package(paths.run_root)
+                    append_log_entry(
+                        paths.logs,
+                        f"{stage.slug} paper_package",
+                        package.summary,
+                    )
+                write_stage_handoff(paths, stage, stage_markdown)
                 append_log_entry(
                     paths.logs,
                     f"{stage.slug} approved",
@@ -466,6 +476,7 @@ class ResearchManager:
     ) -> str:
         template = load_prompt_template(self.prompt_dir, stage)
         stage_template = format_stage_template(template, stage, paths)
+        handoff_context = build_handoff_context(paths, upto_stage=stage)
         stage_template = (
             stage_template.rstrip()
             + "\n\n## Run Configuration\n\n"
@@ -484,10 +495,11 @@ class ResearchManager:
         if self._redo_start_stage is not None and stage.number >= self._redo_start_stage.number:
             approved_memory = filtered_approved_memory(approved_memory, max_stage_number=stage.number - 1)
         if continue_session:
-            return build_continuation_prompt(stage, stage_template, paths, approved_memory, revision_feedback)
+            return build_continuation_prompt(stage, stage_template, paths, handoff_context, revision_feedback)
 
         user_request = read_text(paths.user_input)
-        return build_prompt(stage, stage_template, user_request, approved_memory, revision_feedback)
+        approved_memory = read_text(paths.memory)
+        return build_prompt(stage, stage_template, user_request, approved_memory, handoff_context, revision_feedback)
 
     def _display_stage_output(self, stage: StageSpec, markdown: str) -> None:
         self.ui.show_stage_document(stage.stage_title, markdown)
