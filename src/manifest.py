@@ -15,12 +15,15 @@ class StageManifestEntry:
     status: str = "pending"
     approved: bool = False
     dirty: bool = False
+    stale: bool = False
     attempt_count: int = 0
     session_id: str | None = None
     final_stage_path: str = ""
     draft_stage_path: str = ""
     artifact_paths: list[str] = field(default_factory=list)
     last_error: str | None = None
+    invalidated_reason: str | None = None
+    invalidated_by_stage: str | None = None
     updated_at: str = ""
     approved_at: str | None = None
 
@@ -32,12 +35,15 @@ class StageManifestEntry:
             "status": self.status,
             "approved": self.approved,
             "dirty": self.dirty,
+            "stale": self.stale,
             "attempt_count": self.attempt_count,
             "session_id": self.session_id,
             "final_stage_path": self.final_stage_path,
             "draft_stage_path": self.draft_stage_path,
             "artifact_paths": list(self.artifact_paths),
             "last_error": self.last_error,
+            "invalidated_reason": self.invalidated_reason,
+            "invalidated_by_stage": self.invalidated_by_stage,
             "updated_at": self.updated_at,
             "approved_at": self.approved_at,
         }
@@ -51,12 +57,15 @@ class StageManifestEntry:
             status=str(payload.get("status") or "pending"),
             approved=bool(payload.get("approved", False)),
             dirty=bool(payload.get("dirty", False)),
+            stale=bool(payload.get("stale", False)),
             attempt_count=int(payload.get("attempt_count") or 0),
             session_id=str(payload["session_id"]) if payload.get("session_id") is not None else None,
             final_stage_path=str(payload.get("final_stage_path") or ""),
             draft_stage_path=str(payload.get("draft_stage_path") or ""),
             artifact_paths=[str(item) for item in payload.get("artifact_paths", []) if str(item).strip()],
             last_error=str(payload["last_error"]) if payload.get("last_error") is not None else None,
+            invalidated_reason=str(payload["invalidated_reason"]) if payload.get("invalidated_reason") is not None else None,
+            invalidated_by_stage=str(payload["invalidated_by_stage"]) if payload.get("invalidated_by_stage") is not None else None,
             updated_at=str(payload.get("updated_at") or ""),
             approved_at=str(payload["approved_at"]) if payload.get("approved_at") is not None else None,
         )
@@ -165,9 +174,17 @@ def format_manifest_status(manifest: RunManifest) -> str:
         "Stages:",
     ]
     for entry in manifest.stages:
+        flags = []
+        if entry.approved:
+            flags.append("approved")
+        if entry.dirty:
+            flags.append("dirty")
+        if entry.stale:
+            flags.append("stale")
+        suffix = f" [{' '.join(flags)}]" if flags else ""
         lines.append(
             f"- {entry.slug}: status={entry.status}, approved={entry.approved}, attempts={entry.attempt_count}, "
-            f"session_id={entry.session_id or 'none'}"
+            f"session_id={entry.session_id or 'none'}{suffix}"
         )
     return "\n".join(lines)
 
@@ -237,6 +254,7 @@ def mark_stage_running_manifest(paths: RunPaths, stage: StageSpec, attempt_no: i
         status="running",
         approved=False,
         dirty=False,
+        stale=False,
         attempt_count=attempt_no,
         last_error=None,
     )
@@ -260,6 +278,7 @@ def mark_stage_human_review_manifest(
         status="human_review",
         approved=False,
         dirty=False,
+        stale=False,
         attempt_count=attempt_no,
         artifact_paths=artifact_paths,
     )
@@ -283,6 +302,7 @@ def mark_stage_approved_manifest(
         status="approved",
         approved=True,
         dirty=False,
+        stale=False,
         attempt_count=attempt_no,
         artifact_paths=artifact_paths,
         approved_at=_now(),
@@ -303,9 +323,88 @@ def mark_stage_failed_manifest(paths: RunPaths, stage: StageSpec, error: str) ->
         status="failed",
         approved=False,
         dirty=True,
+        stale=False,
         last_error=error,
     )
 
 
 def sync_stage_session_id(paths: RunPaths, stage: StageSpec, session_id: str | None) -> RunManifest:
     return update_stage_entry(paths, stage, session_id=session_id)
+
+
+def rollback_to_stage(paths: RunPaths, rollback_stage: StageSpec, reason: str | None = None) -> RunManifest:
+    manifest = ensure_run_manifest(paths)
+    invalidated_reason = reason or f"Rolled back to {rollback_stage.stage_title}"
+    updated_stages: list[StageManifestEntry] = []
+
+    for entry in manifest.stages:
+        payload = entry.to_dict()
+        if entry.number < rollback_stage.number:
+            updated_stages.append(entry)
+            continue
+        if entry.number == rollback_stage.number:
+            payload.update(
+                {
+                    "status": "pending",
+                    "approved": False,
+                    "dirty": True,
+                    "stale": False,
+                    "approved_at": None,
+                    "invalidated_reason": invalidated_reason,
+                    "invalidated_by_stage": rollback_stage.slug,
+                }
+            )
+        else:
+            payload.update(
+                {
+                    "status": "stale",
+                    "approved": False,
+                    "dirty": True,
+                    "stale": True,
+                    "approved_at": None,
+                    "invalidated_reason": invalidated_reason,
+                    "invalidated_by_stage": rollback_stage.slug,
+                }
+            )
+        payload["updated_at"] = _now()
+        updated_stages.append(StageManifestEntry.from_dict(payload))
+
+    updated = RunManifest(
+        run_id=manifest.run_id,
+        created_at=manifest.created_at,
+        updated_at=_now(),
+        run_status="pending",
+        last_event="run.rolled_back",
+        current_stage_slug=rollback_stage.slug,
+        last_error=None,
+        completed_at=None,
+        stages=updated_stages,
+    )
+    save_run_manifest(paths.run_manifest, updated)
+    rebuild_memory_from_manifest(paths, updated)
+    return updated
+
+
+def rebuild_memory_from_manifest(paths: RunPaths, manifest: RunManifest | None = None) -> None:
+    manifest = manifest or ensure_run_manifest(paths)
+    goal_text = paths.user_input.read_text(encoding="utf-8").strip()
+    entries: list[str] = []
+    from .utils import read_text, render_approved_stage_entry, write_text
+
+    for stage in STAGES:
+        entry = next(item for item in manifest.stages if item.slug == stage.slug)
+        if not entry.approved:
+            continue
+        stage_path = paths.stage_file(stage)
+        if not stage_path.exists():
+            continue
+        entries.append(render_approved_stage_entry(stage, read_text(stage_path)))
+
+    body = (
+        "# Approved Run Memory\n\n"
+        "## Original User Goal\n"
+        f"{goal_text}\n\n"
+        "## Approved Stage Summaries\n\n"
+    )
+    body += "\n\n".join(entries) + "\n" if entries else "_None yet._\n"
+    write_text(paths.memory, body)

@@ -15,6 +15,8 @@ from .manifest import (
     mark_stage_failed_manifest,
     mark_stage_human_review_manifest,
     mark_stage_running_manifest,
+    rebuild_memory_from_manifest,
+    rollback_to_stage,
     sync_stage_session_id,
     update_manifest_run_status,
 )
@@ -77,6 +79,7 @@ class ResearchManager:
         self,
         run_root: Path,
         start_stage: StageSpec | None = None,
+        rollback_stage: StageSpec | None = None,
         venue: str | None = None,
     ) -> bool:
         paths = build_run_paths(run_root)
@@ -88,11 +91,17 @@ class ResearchManager:
         if not paths.memory.exists():
             raise FileNotFoundError(f"Missing memory.md in run: {run_root}")
 
+        if rollback_stage is not None:
+            self._print(self._format_rollback_preview(paths, rollback_stage))
+            rollback_to_stage(paths, rollback_stage)
+            start_stage = rollback_stage
+
         append_log_entry(
             paths.logs,
             "run_resume",
             f"Resumed run at: {paths.run_root}"
             + (f"\nRequested start stage: {start_stage.stage_title}" if start_stage else "")
+            + (f"\nRequested rollback stage: {rollback_stage.stage_title}" if rollback_stage else "")
             + f"\nVenue: {config['venue']}",
         )
         self.ui.show_run_started(
@@ -525,6 +534,24 @@ class ResearchManager:
             level="warn",
         )
         return type("FallbackResult", (), {"stage_file_path": draft_path, "stdout": fallback_text, "stderr": ""})()
+
+    def _format_rollback_preview(self, paths: RunPaths, rollback_stage: StageSpec) -> str:
+        manifest = ensure_run_manifest(paths)
+        stale_candidates = [
+            entry.slug
+            for entry in manifest.stages
+            if entry.number > rollback_stage.number and (entry.approved or entry.status != "pending")
+        ]
+        lines = [
+            f"Rolling back to {rollback_stage.stage_title}.",
+            f"Stage {rollback_stage.slug} will be marked pending/dirty.",
+        ]
+        if stale_candidates:
+            lines.append("Downstream stages that will be marked stale:")
+            lines.extend(f"- {slug}" for slug in stale_candidates)
+        else:
+            lines.append("No downstream stages currently need invalidation.")
+        return "\n".join(lines)
 
     def describe_run_status(self, run_root: Path) -> str:
         paths = build_run_paths(run_root)
