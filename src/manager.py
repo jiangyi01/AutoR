@@ -23,12 +23,14 @@ from .manifest import (
     update_manifest_run_status,
 )
 from .operator import ClaudeOperator
+from .platform.foundry import generate_paper_package, generate_release_package
 from .writing_manifest import build_writing_manifest, format_manifest_for_prompt
 from .utils import (
     STAGES,
     RunPaths,
     StageSpec,
     append_approved_stage_summary,
+    approved_stage_numbers,
     append_log_entry,
     build_handoff_context,
     build_continuation_prompt,
@@ -40,9 +42,11 @@ from .utils import (
     ensure_run_layout,
     format_stage_template,
     format_venue_for_prompt,
+    filtered_approved_memory,
     initialize_memory,
     initialize_run_config,
     load_prompt_template,
+    mark_stage_execution_started,
     parse_refinement_suggestions,
     read_text,
     truncate_text,
@@ -60,16 +64,19 @@ class ResearchManager:
         runs_dir: Path,
         operator: ClaudeOperator,
         output_stream: TextIO = sys.stdout,
+        ui: TerminalUI | None = None,
     ) -> None:
         self.project_root = project_root
         self.runs_dir = runs_dir
         self.operator = operator
         self.prompt_dir = self.project_root / "src" / "prompts"
         self.output_stream = output_stream
+        self.ui = ui or TerminalUI(output_stream=output_stream)
+        self._redo_start_stage: StageSpec | None = None
 
     def run(self, user_goal: str, venue: str | None = None) -> bool:
         paths = self._create_run(user_goal, venue=venue)
-        self._print(f"Run created at: {paths.run_root}")
+        self.ui.show_run_started(paths.run_root.as_posix(), self.operator.model, venue or "default")
         return self._run_from_paths(paths)
 
     def resume_run(
@@ -101,10 +108,14 @@ class ResearchManager:
             + (f"\nRequested rollback stage: {rollback_stage.stage_title}" if rollback_stage else "")
             + f"\nVenue: {config['venue']}",
         )
-        self._print(f"Resuming run at: {paths.run_root}")
+        self.ui.show_run_started(
+            paths.run_root.as_posix(),
+            self.operator.model,
+            config["venue"],
+            resumed=True,
+        )
         if start_stage:
-            self._print(f"Restarting from: {start_stage.stage_title}")
-        self._print(f"Venue profile: {config['venue']}")
+            self.ui.show_status(f"Restarting from {start_stage.stage_title}", level="warn")
         return self._run_from_paths(paths, start_stage=start_stage)
 
     def _run_from_paths(self, paths: RunPaths, start_stage: StageSpec | None = None) -> bool:
@@ -178,6 +189,7 @@ class ResearchManager:
         attempt_no = 1
         revision_feedback: str | None = None
         continue_session = False
+        mark_stage_execution_started(paths, stage)
 
         while True:
             mark_stage_running_manifest(paths, stage, attempt_no)
@@ -215,8 +227,9 @@ class ResearchManager:
             )
 
             if not result.stage_file_path.exists():
-                self._print(
-                    f"Stage summary draft missing for {stage.stage_title}. Running repair attempt..."
+                self.ui.show_status(
+                    f"Stage summary draft missing for {stage.stage_title}. Running repair attempt...",
+                    level="warn",
                 )
                 append_log_entry(
                     paths.logs,
@@ -259,7 +272,7 @@ class ResearchManager:
                 )
 
             stage_markdown = read_text(result.stage_file_path)
-            validation_errors = validate_stage_markdown(stage_markdown) + validate_stage_artifacts(stage, paths)
+            validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
             if validation_errors:
                 mark_stage_failed_manifest(paths, stage, "; ".join(validation_errors))
                 self._print(
@@ -306,10 +319,11 @@ class ResearchManager:
                     )
 
                 stage_markdown = read_text(repair_result.stage_file_path)
-                validation_errors = validate_stage_markdown(stage_markdown) + validate_stage_artifacts(stage, paths)
+                validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
                 if validation_errors:
-                    self._print(
-                        f"Repair output for {stage.stage_title} is still incomplete. Normalizing locally..."
+                    self.ui.show_status(
+                        f"Repair output for {stage.stage_title} is still incomplete. Normalizing locally...",
+                        level="warn",
                     )
                     normalized_markdown = canonicalize_stage_markdown(
                         stage=stage,
@@ -333,7 +347,7 @@ class ResearchManager:
                     )
 
                     stage_markdown = read_text(repair_result.stage_file_path)
-                    validation_errors = validate_stage_markdown(stage_markdown) + validate_stage_artifacts(stage, paths)
+                    validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
                     if validation_errors:
                         append_log_entry(
                             paths.logs,
@@ -376,8 +390,9 @@ class ResearchManager:
                 self._stage_file_paths(stage_markdown),
             )
 
+            suggestions = parse_refinement_suggestions(stage_markdown)
             self._display_stage_output(stage, stage_markdown)
-            choice = self._ask_choice()
+            choice = self._ask_choice(suggestions)
             append_log_entry(
                 paths.logs,
                 f"{stage.slug} attempt {attempt_no} user_choice",
@@ -385,7 +400,6 @@ class ResearchManager:
             )
 
             if choice in {"1", "2", "3"}:
-                suggestions = parse_refinement_suggestions(stage_markdown)
                 selected = suggestions[int(choice) - 1]
                 revision_feedback = (
                     "Continue the current stage conversation and improve the existing work. "
@@ -414,6 +428,17 @@ class ResearchManager:
                 continue
 
             if choice == "5":
+                final_stage_path = paths.stage_file(stage)
+                shutil.copyfile(result.stage_file_path, final_stage_path)
+                append_log_entry(
+                    paths.logs,
+                    f"{stage.slug} attempt {attempt_no} promoted",
+                    (
+                        "Promoted validated stage summary draft to final stage file after approval.\n"
+                        f"draft: {result.stage_file_path}\n"
+                        f"final: {final_stage_path}"
+                    ),
+                )
                 append_approved_stage_summary(paths.memory, stage, stage_markdown)
                 mark_stage_approved_manifest(
                     paths,
@@ -421,6 +446,20 @@ class ResearchManager:
                     attempt_no,
                     self._stage_file_paths(stage_markdown),
                 )
+                if stage.slug == "07_writing":
+                    package = generate_paper_package(paths.run_root)
+                    append_log_entry(
+                        paths.logs,
+                        f"{stage.slug} paper_package",
+                        package.summary,
+                    )
+                elif stage.slug == "08_dissemination":
+                    package = generate_release_package(paths.run_root)
+                    append_log_entry(
+                        paths.logs,
+                        f"{stage.slug} release_package",
+                        package.summary,
+                    )
                 write_stage_handoff(paths, stage, stage_markdown)
                 write_artifact_index(paths)
                 write_experiment_manifest(paths)
@@ -433,7 +472,7 @@ class ResearchManager:
                         f"Updated experiment manifest: {paths.experiment_manifest}"
                     ),
                 )
-                self._print(f"Approved {stage.stage_title}.")
+                self.ui.show_status(f"Approved {stage.stage_title}.", level="success")
                 return True
 
             if choice == "6":
@@ -486,6 +525,9 @@ class ResearchManager:
                 + format_manifest_for_prompt(manifest)
                 + "\n"
             )
+        approved_memory = read_text(paths.memory)
+        if self._redo_start_stage is not None and stage.number >= self._redo_start_stage.number:
+            approved_memory = filtered_approved_memory(approved_memory, max_stage_number=stage.number - 1)
         if continue_session:
             return build_continuation_prompt(stage, stage_template, paths, handoff_context, revision_feedback)
 
@@ -494,36 +536,13 @@ class ResearchManager:
         return build_prompt(stage, stage_template, user_request, approved_memory, handoff_context, revision_feedback)
 
     def _display_stage_output(self, stage: StageSpec, markdown: str) -> None:
-        divider = "=" * 80
-        self._print(f"\n{divider}")
-        self._print(stage.stage_title)
-        self._print(divider)
-        self._print(markdown.rstrip())
-        self._print(divider)
+        self.ui.show_stage_document(stage.stage_title, markdown)
 
-    def _ask_choice(self) -> str:
-        valid = {"1", "2", "3", "4", "5", "6"}
-        while True:
-            choice = input("Enter your choice:\n> ").strip()
-            if choice in valid:
-                return choice
-            self._print("Invalid choice. Enter one of: 1, 2, 3, 4, 5, 6.")
+    def _ask_choice(self, suggestions: list[str]) -> str:
+        return self.ui.choose_action(suggestions)
 
     def _read_multiline_feedback(self) -> str:
-        self._print("Enter custom feedback. Finish with an empty line:")
-        lines: list[str] = []
-
-        while True:
-            prompt = "> " if not lines else ""
-            line = input(prompt)
-            if not line.strip():
-                if lines:
-                    break
-                self._print("Feedback cannot be empty.")
-                continue
-            lines.append(line.rstrip())
-
-        return "\n".join(lines).strip()
+        return self.ui.read_multiline_feedback()
 
     def _materialize_missing_stage_draft(
         self,
@@ -555,9 +574,10 @@ class ResearchManager:
                 f"{truncate_text(normalized_markdown, max_chars=4000)}"
             ),
         )
-        self._print(
+        self.ui.show_status(
             f"{stage.stage_title} did not produce a stage summary file during {source}. "
-            "Generated a local fallback draft and continuing recovery..."
+            "Generated a local fallback draft and continuing recovery...",
+            level="warn",
         )
         return type("FallbackResult", (), {"stage_file_path": draft_path, "stdout": fallback_text, "stderr": ""})()
 
@@ -593,4 +613,4 @@ class ResearchManager:
         return extract_path_references(stage_markdown)
 
     def _print(self, text: str) -> None:
-        print(text, file=self.output_stream)
+        self.ui.write(text.rstrip() + "\n")
