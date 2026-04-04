@@ -13,7 +13,8 @@ from .intake import (
     format_resources_for_intake_prompt,
     ingest_resources,
     load_intake_context,
-    save_intake_context,
+    save_intake_context
+)
 from .artifact_index import format_artifact_index_for_prompt, write_artifact_index
 from .experiment_manifest import format_experiment_manifest_for_prompt, write_experiment_manifest
 from .manifest import (
