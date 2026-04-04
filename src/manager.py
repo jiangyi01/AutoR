@@ -6,6 +6,15 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from .intake import (
+    IntakeContext,
+    ResourceEntry,
+    format_intake_for_prompt,
+    format_resources_for_intake_prompt,
+    ingest_resources,
+    load_intake_context,
+    save_intake_context
+)
 from .artifact_index import format_artifact_index_for_prompt, write_artifact_index
 from .experiment_manifest import format_experiment_manifest_for_prompt, write_experiment_manifest
 from .manifest import (
@@ -26,6 +35,7 @@ from .operator import ClaudeOperator
 from .platform.foundry import generate_paper_package, generate_release_package
 from .writing_manifest import build_writing_manifest, format_manifest_for_prompt
 from .utils import (
+    INTAKE_STAGE,
     STAGES,
     RunPaths,
     StageSpec,
@@ -74,9 +84,24 @@ class ResearchManager:
         self.ui = ui or TerminalUI(output_stream=output_stream)
         self._redo_start_stage: StageSpec | None = None
 
-    def run(self, user_goal: str, venue: str | None = None) -> bool:
-        paths = self._create_run(user_goal, venue=venue)
+    def run(
+        self,
+        user_goal: str,
+        venue: str | None = None,
+        resources: list[ResourceEntry] | None = None,
+        skip_intake: bool = False,
+    ) -> bool:
+        paths = self._create_run(user_goal, venue=venue, resources=resources)
         self.ui.show_run_started(paths.run_root.as_posix(), self.operator.model, venue or "default")
+
+        # Run Claude-driven intake stage unless skipped
+        if not skip_intake:
+            intake_approved = self._run_intake(paths)
+            if not intake_approved:
+                append_log_entry(paths.logs, "run_aborted", "Run aborted during intake.")
+                self.ui.show_status("Run aborted.", level="warn")
+                return False
+
         return self._run_from_paths(paths)
 
     def resume_run(
@@ -149,12 +174,26 @@ class ResearchManager:
         self._print("All stages approved. Run complete.")
         return True
 
-    def _create_run(self, user_goal: str, venue: str | None = None) -> RunPaths:
+    def _create_run(
+        self,
+        user_goal: str,
+        venue: str | None = None,
+        resources: list[ResourceEntry] | None = None,
+    ) -> RunPaths:
         run_root = create_run_root(self.runs_dir)
         paths = build_run_paths(run_root)
         ensure_run_layout(paths)
         write_text(paths.user_input, user_goal)
-        initialize_memory(paths, user_goal)
+
+        # Ingest any pre-provided resources into workspace
+        intake_summary: str | None = None
+        if resources:
+            updated = ingest_resources(resources, paths)
+            ctx = IntakeContext(goal=user_goal, original_goal=user_goal, resources=updated)
+            save_intake_context(paths, ctx)
+            intake_summary = format_intake_for_prompt(ctx)
+
+        initialize_memory(paths, user_goal, intake_summary=intake_summary)
         config = initialize_run_config(paths, model=self.operator.model, venue=venue)
         initialize_run_manifest(paths)
         write_artifact_index(paths)
@@ -184,6 +223,146 @@ class ResearchManager:
             pending.append(stage)
 
         return pending
+
+    # ------------------------------------------------------------------
+    # Intake stage (Claude-driven Socratic Q&A, runs before Stage 01)
+    # ------------------------------------------------------------------
+
+    def _run_intake(self, paths: RunPaths) -> bool:
+        """Run the Claude-driven intake stage.
+
+        Uses the same operator + approval loop pattern as ``_run_stage``
+        so that Claude generates Socratic questions and the user refines
+        via the standard suggestion / custom-feedback / approve mechanism.
+
+        On approval the intake summary is saved to ``intake_context.json``
+        and appended to run memory so all downstream stages can see it.
+        """
+        stage = INTAKE_STAGE
+
+        # Skip if intake was already approved (e.g. on resume)
+        intake_stage_file = paths.stage_file(stage)
+        if intake_stage_file.exists():
+            self.ui.show_status("Intake already approved, skipping.", level="info")
+            return True
+
+        attempt_no = 1
+        revision_feedback: str | None = None
+        continue_session = False
+        mark_stage_execution_started(paths, stage)
+
+        while True:
+            self.ui.show_stage_start(stage.stage_title, attempt_no, continue_session)
+            prompt = self._build_stage_prompt(paths, stage, revision_feedback, continue_session)
+            append_log_entry(paths.logs, f"{stage.slug} attempt {attempt_no} prompt", prompt)
+
+            result = self.operator.run_stage(stage, prompt, paths, attempt_no, continue_session=continue_session)
+            append_log_entry(
+                paths.logs,
+                f"{stage.slug} attempt {attempt_no} result",
+                (
+                    f"success: {result.success}\n"
+                    f"exit_code: {result.exit_code}\n"
+                    f"session_id: {result.session_id or '(unknown)'}\n"
+                    f"stage_file_path: {result.stage_file_path}\n\n"
+                    "stdout:\n"
+                    f"{result.stdout or '(empty)'}\n\n"
+                    "stderr:\n"
+                    f"{result.stderr or '(empty)'}"
+                ),
+            )
+
+            # If no stage file was produced, try repair (same as regular stages)
+            if not result.stage_file_path.exists():
+                self.ui.show_status(
+                    f"Stage summary draft missing for {stage.stage_title}. Running repair attempt...",
+                    level="warn",
+                )
+                repair_result = self.operator.repair_stage_summary(
+                    stage=stage, original_prompt=prompt,
+                    original_result=result, paths=paths, attempt_no=attempt_no,
+                )
+                result = repair_result
+
+            if not result.stage_file_path.exists():
+                fallback_text = "\n\n".join(
+                    part for part in [result.stdout, result.stderr] if part
+                )
+                result = self._materialize_missing_stage_draft(
+                    paths=paths, stage=stage, attempt_no=attempt_no,
+                    source="intake attempt and repair", fallback_text=fallback_text,
+                )
+
+            stage_markdown = read_text(result.stage_file_path)
+
+            # Show output and let user choose (same approval loop as _run_stage)
+            suggestions = parse_refinement_suggestions(stage_markdown)
+            self._display_stage_output(stage, stage_markdown)
+            choice = self._ask_choice(suggestions)
+            append_log_entry(paths.logs, f"{stage.slug} attempt {attempt_no} user_choice", f"choice: {choice}")
+
+            if choice in {"1", "2", "3"}:
+                selected = suggestions[int(choice) - 1]
+                revision_feedback = (
+                    "Continue the current stage conversation and improve the existing work. "
+                    "Do not discard correct completed parts. Address this refinement request:\n"
+                    f"{selected}"
+                )
+                continue_session = True
+                attempt_no += 1
+                continue
+
+            if choice == "4":
+                custom_feedback = self._read_multiline_feedback()
+                revision_feedback = (
+                    "Continue the current stage conversation and improve the existing work. "
+                    "Preserve correct completed parts unless the feedback requires changing them. "
+                    "Address this user feedback:\n"
+                    f"{custom_feedback}"
+                )
+                append_log_entry(paths.logs, f"{stage.slug} attempt {attempt_no} custom_feedback", custom_feedback)
+                continue_session = True
+                attempt_no += 1
+                continue
+
+            if choice == "5":
+                # Promote and save intake context
+                final_path = paths.stage_file(stage)
+                shutil.copyfile(result.stage_file_path, final_path)
+                append_log_entry(
+                    paths.logs,
+                    f"{stage.slug} attempt {attempt_no} promoted",
+                    f"Promoted intake summary.\ndraft: {result.stage_file_path}\nfinal: {final_path}",
+                )
+                self._save_intake_from_approved_stage(paths, stage_markdown)
+                self.ui.show_status(f"Approved {stage.stage_title}.", level="success")
+                return True
+
+            if choice == "6":
+                return False
+
+    def _save_intake_from_approved_stage(self, paths: RunPaths, stage_markdown: str) -> None:
+        """Persist the approved intake stage output into intake_context.json and memory."""
+        existing_ctx = load_intake_context(paths)
+        goal = read_text(paths.user_input).strip()
+
+        # Merge: keep any pre-ingested resources, store the stage output as notes
+        ctx = IntakeContext(
+            goal=goal,
+            original_goal=existing_ctx.original_goal if existing_ctx else goal,
+            resources=existing_ctx.resources if existing_ctx else [],
+            notes=stage_markdown,
+        )
+        save_intake_context(paths, ctx)
+
+        # Append intake summary to memory so downstream stages see it
+        intake_text = format_intake_for_prompt(ctx)
+        if intake_text:
+            append_approved_stage_summary(paths.memory, INTAKE_STAGE, stage_markdown)
+
+    # ------------------------------------------------------------------
+    # Regular stages (01–08)
+    # ------------------------------------------------------------------
 
     def _run_stage(self, paths: RunPaths, stage: StageSpec) -> bool:
         attempt_no = 1
@@ -484,6 +663,10 @@ class ResearchManager:
                 )
                 return False
 
+    # ------------------------------------------------------------------
+    # Prompt building
+    # ------------------------------------------------------------------
+
     def _build_stage_prompt(
         self,
         paths: RunPaths,
@@ -517,6 +700,15 @@ class ResearchManager:
                 + format_experiment_manifest_for_prompt(experiment_manifest)
                 + "\n"
             )
+        if stage.slug == "00_intake":
+            ctx = load_intake_context(paths)
+            if ctx and ctx.resources:
+                stage_template = (
+                    stage_template.rstrip()
+                    + "\n\n## Pre-Loaded Resources (already in workspace)\n\n"
+                    + format_resources_for_intake_prompt(ctx.resources)
+                    + "\n"
+                )
         if stage.slug == "07_writing":
             manifest = build_writing_manifest(paths)
             stage_template = (
@@ -525,15 +717,29 @@ class ResearchManager:
                 + format_manifest_for_prompt(manifest)
                 + "\n"
             )
+
         approved_memory = read_text(paths.memory)
         if self._redo_start_stage is not None and stage.number >= self._redo_start_stage.number:
             approved_memory = filtered_approved_memory(approved_memory, max_stage_number=stage.number - 1)
+
+        # Inject intake context for regular stages (01+)
+        intake_context_text: str | None = None
+        if stage.number > 0:
+            ctx = load_intake_context(paths)
+            if ctx:
+                intake_context_text = format_intake_for_prompt(ctx)
+
         if continue_session:
-            return build_continuation_prompt(stage, stage_template, paths, handoff_context, revision_feedback)
+            return build_continuation_prompt(
+                stage, stage_template, paths, handoff_context, revision_feedback,
+                intake_context_text=intake_context_text,
+            )
 
         user_request = read_text(paths.user_input)
-        approved_memory = read_text(paths.memory)
-        return build_prompt(stage, stage_template, user_request, approved_memory, handoff_context, revision_feedback)
+        return build_prompt(
+            stage, stage_template, user_request, approved_memory, handoff_context, revision_feedback,
+            intake_context_text=intake_context_text,
+        )
 
     def _display_stage_output(self, stage: StageSpec, markdown: str) -> None:
         self.ui.show_stage_document(stage.stage_title, markdown)

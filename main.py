@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from src.intake import ResourceEntry, classify_resource, collect_resource_paths_from_ui
 from src.manager import ResearchManager
 from src.operator import ClaudeOperator
 from src.terminal_ui import TerminalUI
@@ -55,6 +56,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--redo-stage",
         help="When resuming a run, restart from this stage slug or stage number (for example '06_analysis' or '6').",
+    )
+    parser.add_argument(
+        "--resources",
+        nargs="+",
+        metavar="PATH",
+        help="Paths to resource files or directories to include in the run "
+             "(PDFs, code repos, datasets, .bib files, notes).",
+    )
+    parser.add_argument(
+        "--skip-intake",
+        action="store_true",
+        help="Skip the Claude-driven Socratic intake stage.",
     )
     parser.add_argument(
         "--rollback-stage",
@@ -115,6 +128,24 @@ def read_user_goal() -> str:
     return goal
 
 
+def _build_resource_entries(paths: list[str]) -> list[ResourceEntry]:
+    """Classify CLI --resources into ResourceEntry objects."""
+    entries: list[ResourceEntry] = []
+    for p in paths:
+        path = Path(p).expanduser().resolve()
+        rtype, ddir = classify_resource(path)
+        entries.append(
+            ResourceEntry(
+                source_path=str(path),
+                resource_type=rtype,
+                dest_dir=ddir,
+                dest_relative="",
+                description="",
+            )
+        )
+    return entries
+
+
 def main() -> int:
     args = parse_args()
     repo_root = Path(__file__).resolve().parent
@@ -152,8 +183,23 @@ def main() -> int:
         operator=operator,
         ui=ui,
     )
+
     goal = args.goal.strip() if args.goal else read_user_goal()
-    return 0 if manager.run(goal, venue=venue) else 1
+    skip_intake = args.skip_intake or not sys.stdin.isatty()
+
+    # Collect resources: from --resources flag, and optionally from interactive prompt
+    resources: list[ResourceEntry] = []
+    if args.resources:
+        resources = _build_resource_entries(args.resources)
+    if not skip_intake and sys.stdin.isatty():
+        resources = collect_resource_paths_from_ui(ui, initial_resources=args.resources)
+
+    return 0 if manager.run(
+        goal,
+        venue=venue,
+        resources=resources or None,
+        skip_intake=skip_intake,
+    ) else 1
 
 
 if __name__ == "__main__":

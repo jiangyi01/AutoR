@@ -52,6 +52,7 @@ class RunPaths:
     artifacts_dir: Path
     notes_dir: Path
     reviews_dir: Path
+    intake_context: Path
 
     def stage_file(self, stage: StageSpec) -> Path:
         return self.stages_dir / stage.filename
@@ -78,6 +79,8 @@ class OperatorResult:
     stage_file_path: Path
     session_id: str | None = None
 
+
+INTAKE_STAGE = StageSpec(0, "00_intake", "Research Intake")
 
 STAGES: list[StageSpec] = [
     StageSpec(1, "01_literature_survey", "Literature Survey"),
@@ -173,6 +176,7 @@ def build_run_paths(run_root: Path) -> RunPaths:
         artifacts_dir=workspace_root / "artifacts",
         notes_dir=workspace_root / "notes",
         reviews_dir=workspace_root / "reviews",
+        intake_context=run_root / "intake_context.json",
     )
 
 
@@ -231,8 +235,8 @@ def append_jsonl(path: Path, payload: dict[str, Any]) -> None:
     append_text(path, json.dumps(payload, ensure_ascii=True) + "\n")
 
 
-def initialize_memory(paths: RunPaths, user_goal: str) -> None:
-    write_text(paths.memory, build_memory_text(user_goal, []))
+def initialize_memory(paths: RunPaths, user_goal: str, intake_summary: str | None = None) -> None:
+    write_text(paths.memory, build_memory_text(user_goal, [], intake_summary=intake_summary))
 
 
 def initialize_run_config(paths: RunPaths, model: str, venue: str | None = None) -> dict[str, Any]:
@@ -395,6 +399,7 @@ def build_prompt(
     approved_memory: str,
     handoff_context: str,
     revision_feedback: str | None,
+    intake_context_text: str | None = None,
 ) -> str:
     sections = [
         "# Stage Instructions",
@@ -420,13 +425,20 @@ def build_prompt(
         ),
         "# Original User Request",
         user_request.strip(),
+    ]
+    if intake_context_text:
+        sections.extend([
+            "# Intake Context (User-Provided Resources and Clarifications)",
+            intake_context_text.strip(),
+        ])
+    sections.extend([
         "# Approved Memory",
         approved_memory.strip() or "_None yet._",
         "# Stage Handoff Context",
         handoff_context.strip() or "No stage handoff summaries available yet.",
         "# Revision Feedback",
         revision_feedback.strip() if revision_feedback else "None.",
-    ]
+    ])
     return "\n\n".join(sections).strip() + "\n"
 
 
@@ -436,6 +448,7 @@ def build_continuation_prompt(
     paths: RunPaths,
     handoff_context: str,
     revision_feedback: str | None,
+    intake_context_text: str | None = None,
 ) -> str:
     current_draft = paths.stage_tmp_file(stage)
     current_final = paths.stage_file(stage)
@@ -468,13 +481,20 @@ def build_continuation_prompt(
             "8. Do not leave placeholder text such as [In progress], [Pending], [TODO], [TBD], or similar unfinished markers.\n"
             "9. If the existing stage work is partially correct, keep the correct parts and extend them rather than replacing them blindly."
         ),
+    ]
+    if intake_context_text:
+        sections.extend([
+            "# Intake Context (User-Provided Resources and Clarifications)",
+            intake_context_text.strip(),
+        ])
+    sections.extend([
         "# Stage Handoff Context",
         handoff_context.strip() or "No stage handoff summaries available yet.",
         "# New Feedback",
         revision_feedback.strip()
         if revision_feedback
         else "Continue improving the current stage output and fix the issues from the previous attempt.",
-    ]
+    ])
     return "\n\n".join(sections).strip() + "\n"
 
 
@@ -768,17 +788,29 @@ def render_approved_stage_entry(stage: StageSpec, stage_markdown: str) -> str:
     )
 
 
-def build_memory_text(user_goal: str, approved_entries: list[str]) -> str:
+def build_memory_text(
+    user_goal: str,
+    approved_entries: list[str],
+    intake_summary: str | None = None,
+) -> str:
     approved_block = "\n\n".join(entry.strip() for entry in approved_entries if entry.strip())
     if not approved_block:
         approved_block = "_None yet._"
-    return (
-        "# Approved Run Memory\n\n"
+    parts = [
+        "# Approved Run Memory\n",
         "## Original User Goal\n"
-        f"{(user_goal or '').strip()}\n\n"
+        f"{(user_goal or '').strip()}\n",
+    ]
+    if intake_summary:
+        parts.append(
+            "## Intake Resources and Clarifications\n"
+            f"{intake_summary.strip()}\n"
+        )
+    parts.append(
         "## Approved Stage Summaries\n\n"
         f"{approved_block}\n"
     )
+    return "\n".join(parts)
 
 
 def approved_stage_entries(memory_text: str) -> list[tuple[int, str]]:
