@@ -33,16 +33,20 @@ class RunPaths:
     user_input: Path
     memory: Path
     run_config: Path
+    run_manifest: Path
+    artifact_index: Path
     logs: Path
     logs_raw: Path
     prompt_cache_dir: Path
     operator_state_dir: Path
     stages_dir: Path
+    handoff_dir: Path
     workspace_root: Path
     literature_dir: Path
     code_dir: Path
     data_dir: Path
     results_dir: Path
+    experiment_manifest: Path
     writing_dir: Path
     figures_dir: Path
     artifacts_dir: Path
@@ -59,8 +63,11 @@ class RunPaths:
     def stage_session_file(self, stage: StageSpec) -> Path:
         return self.operator_state_dir / f"{stage.slug}.session_id.txt"
 
-    def stage_execution_marker_file(self, stage: StageSpec) -> Path:
-        return self.operator_state_dir / f"{stage.slug}.started_at.txt"
+    def stage_session_state_file(self, stage: StageSpec) -> Path:
+        return self.operator_state_dir / f"{stage.slug}.session.json"
+
+    def stage_attempt_state_file(self, stage: StageSpec, attempt_no: int) -> Path:
+        return self.operator_state_dir / f"{stage.slug}.attempt_{attempt_no:02d}.json"
 
 
 @dataclass(frozen=True)
@@ -150,16 +157,20 @@ def build_run_paths(run_root: Path) -> RunPaths:
         user_input=run_root / "user_input.txt",
         memory=run_root / "memory.md",
         run_config=run_root / "run_config.json",
+        run_manifest=run_root / "run_manifest.json",
+        artifact_index=run_root / "artifact_index.json",
         logs=run_root / "logs.txt",
         logs_raw=run_root / "logs_raw.jsonl",
         prompt_cache_dir=run_root / "prompt_cache",
         operator_state_dir=run_root / "operator_state",
         stages_dir=run_root / "stages",
+        handoff_dir=run_root / "handoff",
         workspace_root=workspace_root,
         literature_dir=workspace_root / "literature",
         code_dir=workspace_root / "code",
         data_dir=workspace_root / "data",
         results_dir=workspace_root / "results",
+        experiment_manifest=workspace_root / "results" / "experiment_manifest.json",
         writing_dir=workspace_root / "writing",
         figures_dir=workspace_root / "figures",
         artifacts_dir=workspace_root / "artifacts",
@@ -174,6 +185,7 @@ def ensure_run_layout(paths: RunPaths) -> None:
     paths.prompt_cache_dir.mkdir(parents=True, exist_ok=True)
     paths.operator_state_dir.mkdir(parents=True, exist_ok=True)
     paths.stages_dir.mkdir(parents=True, exist_ok=True)
+    paths.handoff_dir.mkdir(parents=True, exist_ok=True)
     paths.workspace_root.mkdir(parents=True, exist_ok=True)
 
     for directory in workspace_dirs(paths):
@@ -385,6 +397,7 @@ def build_prompt(
     stage_template: str,
     user_request: str,
     approved_memory: str,
+    handoff_context: str,
     revision_feedback: str | None,
     intake_context_text: str | None = None,
 ) -> str:
@@ -421,6 +434,8 @@ def build_prompt(
     sections.extend([
         "# Approved Memory",
         approved_memory.strip() or "_None yet._",
+        "# Stage Handoff Context",
+        handoff_context.strip() or "No stage handoff summaries available yet.",
         "# Revision Feedback",
         revision_feedback.strip() if revision_feedback else "None.",
     ])
@@ -431,7 +446,7 @@ def build_continuation_prompt(
     stage: StageSpec,
     stage_template: str,
     paths: RunPaths,
-    approved_memory: str,
+    handoff_context: str,
     revision_feedback: str | None,
     intake_context_text: str | None = None,
 ) -> str:
@@ -457,7 +472,8 @@ def build_continuation_prompt(
         (
             f"1. Read the current draft at `{current_draft.resolve()}` if it exists.\n"
             f"2. Read the last promoted stage summary at `{current_final.resolve()}` if it exists.\n"
-            f"3. Read the original user goal from `{paths.user_input.resolve()}` if needed.\n"
+            f"3. Read approved memory from `{paths.memory.resolve()}` and the original user goal from `{paths.user_input.resolve()}` if needed.\n"
+            f"4. Read prior handoff summaries under `{paths.handoff_dir.resolve()}` when they exist.\n"
             f"4. Treat workspace artifacts already under `{paths.workspace_root.resolve()}` as part of the current stage context and reuse them.\n"
             "5. Preserve all valid work already completed in this stage unless the new feedback requires changing it.\n"
             "6. Fill the missing pieces, fix weak points, and update the stage summary instead of throwing away correct work.\n"
@@ -472,8 +488,8 @@ def build_continuation_prompt(
             intake_context_text.strip(),
         ])
     sections.extend([
-        "# Approved Memory",
-        approved_memory.strip() or "_None yet._",
+        "# Stage Handoff Context",
+        handoff_context.strip() or "No stage handoff summaries available yet.",
         "# New Feedback",
         revision_feedback.strip()
         if revision_feedback
@@ -647,12 +663,15 @@ def validate_stage_artifacts(stage: StageSpec, paths: RunPaths) -> list[str]:
             problems.append(
                 f"{stage.stage_title} requires machine-readable result artifacts under workspace/results."
             )
-        elif stage.number == 5 and freshness_cutoff is not None and not _has_recent_files_with_suffixes(
-            paths.results_dir, RESULT_SUFFIXES, freshness_cutoff
-        ):
+        if not paths.experiment_manifest.exists():
             problems.append(
-                f"{stage.stage_title} requires result artifacts produced or updated during the current stage execution."
+                f"{stage.stage_title} requires experiment_manifest.json under workspace/results."
             )
+        else:
+            from .experiment_manifest import validate_experiment_manifest
+
+            for problem in validate_experiment_manifest(paths.experiment_manifest):
+                problems.append(f"{stage.stage_title}: {problem}")
 
     if stage.number >= 6:
         if _count_files_with_suffixes(paths.figures_dir, FIGURE_SUFFIXES) == 0:
@@ -865,6 +884,51 @@ def _extract_loose_list_items(section_text: str) -> list[str]:
             items.append(bullet_match.group(1).strip())
 
     return items
+
+
+def extract_path_references(text: str) -> list[str]:
+    seen: set[str] = set()
+    paths: list[str] = []
+
+    for candidate in re.findall(r"`([^`]+)`", text):
+        normalized = candidate.strip()
+        if not normalized or "/" not in normalized:
+            continue
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        paths.append(normalized)
+
+    return paths
+
+
+def write_stage_handoff(paths: RunPaths, stage: StageSpec, stage_markdown: str) -> Path:
+    handoff_path = paths.handoff_dir / f"{stage.slug}.md"
+    objective = extract_markdown_section(stage_markdown, "Objective") or "Not provided."
+    key_results = extract_markdown_section(stage_markdown, "Key Results") or "Not provided."
+    files_produced = extract_markdown_section(stage_markdown, "Files Produced") or "Not provided."
+    write_text(
+        handoff_path,
+        (
+            f"# Handoff: {stage.stage_title}\n\n"
+            "## Objective\n"
+            f"{objective}\n\n"
+            "## Key Results\n"
+            f"{key_results}\n\n"
+            "## Files Produced\n"
+            f"{files_produced}\n"
+        ),
+    )
+    return handoff_path
+
+
+def build_handoff_context(paths: RunPaths, upto_stage: StageSpec | None = None, max_stages: int = 4) -> str:
+    handoffs = sorted(path for path in paths.handoff_dir.glob("*.md") if path.is_file())
+    if upto_stage is not None:
+        handoffs = [path for path in handoffs if path.stem < upto_stage.slug]
+    handoffs = handoffs[-max_stages:]
+    parts = [read_text(path).strip() for path in handoffs if path.exists()]
+    return "\n\n".join(parts).strip() or "No stage handoff summaries available yet."
 
 
 def _extract_path_references(text: str) -> list[str]:

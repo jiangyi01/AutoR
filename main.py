@@ -69,6 +69,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip the Claude-driven Socratic intake stage.",
     )
+    parser.add_argument(
+        "--rollback-stage",
+        help="When resuming a run, roll back to this stage and mark downstream stages stale before continuing.",
+    )
     return parser.parse_args()
 
 
@@ -151,6 +155,9 @@ def main() -> int:
 
     if args.resume_run:
         start_stage = resolve_stage(args.redo_stage)
+        rollback_stage = resolve_stage(args.rollback_stage)
+        if start_stage is not None and rollback_stage is not None:
+            raise ValueError("--redo-stage and --rollback-stage are mutually exclusive.")
         run_root = resolve_resume_run(runs_dir, args.resume_run)
         paths = build_run_paths(run_root)
         existing_config = load_run_config(paths)
@@ -164,7 +171,8 @@ def main() -> int:
             operator=operator,
             ui=ui,
         )
-        return 0 if manager.resume_run(run_root, start_stage=start_stage, venue=venue) else 1
+        manager.resume_run(run_root, start_stage=start_stage or rollback_stage, venue=venue, rollback_stage=rollback_stage)
+        return 0
 
     model = args.model or "sonnet"
     venue = resolve_venue_key(args.venue or DEFAULT_VENUE)
