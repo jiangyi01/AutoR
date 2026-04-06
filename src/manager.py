@@ -33,6 +33,7 @@ from .manifest import (
 )
 from .operator import ClaudeOperator
 from .diagram_gen import post_writing_diagram_hook
+from .terminal_ui import TerminalUI
 from .platform.foundry import generate_paper_package, generate_release_package
 from .writing_manifest import build_writing_manifest, format_manifest_for_prompt
 from .utils import (
