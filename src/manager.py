@@ -32,6 +32,7 @@ from .manifest import (
     update_manifest_run_status,
 )
 from .operator import ClaudeOperator
+from .diagram_gen import post_writing_diagram_hook
 from .platform.foundry import generate_paper_package, generate_release_package
 from .writing_manifest import build_writing_manifest, format_manifest_for_prompt
 from .utils import (
@@ -83,6 +84,7 @@ class ResearchManager:
         self.output_stream = output_stream
         self.ui = ui or TerminalUI(output_stream=output_stream)
         self._redo_start_stage: StageSpec | None = None
+        self._research_diagram: bool = False
 
     def run(
         self,
@@ -90,7 +92,9 @@ class ResearchManager:
         venue: str | None = None,
         resources: list[ResourceEntry] | None = None,
         skip_intake: bool = False,
+        research_diagram: bool = False,
     ) -> bool:
+        self._research_diagram = research_diagram
         paths = self._create_run(user_goal, venue=venue, resources=resources)
         self.ui.show_run_started(paths.run_root.as_posix(), self.operator.model, venue or "default")
 
@@ -110,7 +114,9 @@ class ResearchManager:
         start_stage: StageSpec | None = None,
         rollback_stage: StageSpec | None = None,
         venue: str | None = None,
+        research_diagram: bool = False,
     ) -> bool:
+        self._research_diagram = research_diagram
         paths = build_run_paths(run_root)
         ensure_run_layout(paths)
         config = ensure_run_config(paths, model=self.operator.model, venue=venue)
@@ -626,6 +632,31 @@ class ResearchManager:
                     self._stage_file_paths(stage_markdown),
                 )
                 if stage.slug == "07_writing":
+                    if self._research_diagram:
+                        self.ui.show_status("Generating method illustration diagram...", level="info")
+                        try:
+                            diagram_path = post_writing_diagram_hook(paths.run_root)
+                            if diagram_path:
+                                append_log_entry(
+                                    paths.logs,
+                                    f"{stage.slug} research_diagram",
+                                    f"Generated method illustration: {diagram_path}",
+                                )
+                                self.ui.show_status(f"Method diagram saved to {diagram_path}", level="success")
+                            else:
+                                append_log_entry(
+                                    paths.logs,
+                                    f"{stage.slug} research_diagram",
+                                    "Diagram generation returned None (check logs for details).",
+                                )
+                                self.ui.show_status("Diagram generation did not produce output.", level="warn")
+                        except Exception as exc:
+                            append_log_entry(
+                                paths.logs,
+                                f"{stage.slug} research_diagram_error",
+                                f"Diagram generation failed: {exc}",
+                            )
+                            self.ui.show_status(f"Diagram generation failed: {exc}", level="warn")
                     package = generate_paper_package(paths.run_root)
                     append_log_entry(
                         paths.logs,

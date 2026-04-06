@@ -73,6 +73,12 @@ def parse_args() -> argparse.Namespace:
         "--rollback-stage",
         help="When resuming a run, roll back to this stage and mark downstream stages stale before continuing.",
     )
+    parser.add_argument(
+        "--research-diagram",
+        action="store_true",
+        help="After the writing stage, generate a method illustration diagram using "
+             "the Gemini API and insert it into the LaTeX paper.",
+    )
     return parser.parse_args()
 
 
@@ -171,7 +177,7 @@ def main() -> int:
             operator=operator,
             ui=ui,
         )
-        manager.resume_run(run_root, start_stage=start_stage or rollback_stage, venue=venue, rollback_stage=rollback_stage)
+        manager.resume_run(run_root, start_stage=start_stage or rollback_stage, venue=venue, rollback_stage=rollback_stage, research_diagram=args.research_diagram)
         return 0
 
     model = args.model or "sonnet"
@@ -199,6 +205,7 @@ def main() -> int:
         venue=venue,
         resources=resources or None,
         skip_intake=skip_intake,
+        research_diagram=args.research_diagram,
     ) else 1
 
 

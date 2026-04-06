@@ -1,0 +1,10 @@
+# Diagram Generation Configuration for AutoR
+# Copy this file to diagram_config.yaml and fill in your API key.
+# diagram_config.yaml is gitignored and will NOT be committed.
+
+api_keys:
+  google_api_key: ""  # Your Gemini API key
+
+defaults:
+  model_name: "gemini-2.5-flash"
+  max_critic_rounds: 2
