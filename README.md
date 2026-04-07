@@ -1,4 +1,4 @@
-<h1 align="center">AutoR: Accelerating the AI Research Loop with Human-in-the-Loop Co-pilot </h1>
+<h1 align="center">AutoR: Human-centered Research Execution
 
 <p align="center">
 <b>AI handles the execution load. Humans steer the research direction.</b>
