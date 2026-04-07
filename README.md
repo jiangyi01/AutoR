@@ -1,21 +1,21 @@
-<h1 align="center">AutoR: Human-Centered Research OS 
+<h1 align="center">AutoR: A Human-Centered Research Harness</h1>
 
 <p align="center">
 <sub>
-<b>AI handles the execution load. Humans steer the research direction.</b>
+<b>AI handles execution. Humans own the direction.</b>
 <br />
-A terminal-first, 8-stage pipeline that turns high-level goals into verifiable, venue-ready papers.
+A terminal-first research harness over Claude Code that turns long, messy research work into reproducible, artifact-backed runs.
 </sub>
 </p>
 
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue" alt="Python 3.10+" />
-  <img src="https://img.shields.io/badge/Workflow-8%20Stages-black" alt="8 stages" />
+  <img src="https://img.shields.io/badge/Workflow-Intake%20%2B%208%20Stages-black" alt="Intake plus 8 stages" />
   <img src="https://img.shields.io/badge/Interface-Terminal--first-green" alt="Terminal-first" />
   <img src="https://img.shields.io/badge/Human-Approval%20Required-orange" alt="Human approval required" />
-  <img src="https://img.shields.io/badge/Artifacts-Real%20Research%20Outputs-red" alt="Real artifacts" />
-  <img src="https://img.shields.io/badge/Writing-Venue--aware%20Paper%20Packaging-purple" alt="Venue-aware writing" />
+  <img src="https://img.shields.io/badge/Execution-Claude%20Code%20Harness-purple" alt="Claude Code harness" />
+  <img src="https://img.shields.io/badge/Artifacts-Reproducible%20Research%20Runs-red" alt="Reproducible research runs" />
   <a href="https://github.com/HavenIntelligence/AutoR">
     <img src="https://img.shields.io/github/stars/HavenIntelligence/AutoR?style=social" alt="GitHub stars" />
   </a>
@@ -44,40 +44,49 @@ A terminal-first, 8-stage pipeline that turns high-level goals into verifiable, 
 
 > AutoR is not a chat demo, not a generic agent framework, and not a markdown-only research toy.
 >
-> It is a research execution loop:
-> **goal -> literature -> hypothesis -> design -> implementation -> experiments -> analysis -> paper -> dissemination**,
-> with explicit human control at every stage and real artifacts on disk.
+> It is a structured research harness over Claude Code:
+> **AI handles execution, humans own the direction, and every run becomes an inspectable research artifact on disk.**
 
 ## ✨ Why AutoR
 
-Most AI research demos stop at "the model wrote a plausible summary."
+Most autoresearch systems optimize for autonomy.
 
-AutoR is built around a harder standard: the system should leave behind a run directory that another person can inspect, resume, audit, and critique.
+AutoR takes a different position: research is too important to hand over as a blind end-to-end loop. The goal is not to remove humans from research. The goal is to give them a stronger execution system.
 
-### What makes it different
+### Four design commitments
 
-| AutoR does | Why it matters |
+| Commitment | Why it matters |
 | --- | --- |
-| **Fixed 8-stage research workflow** | The system behaves like a real research process instead of a free-form chat loop. |
-| **Mandatory human approval after every stage** | AI executes; humans retain control at high-leverage decision points. |
-| **Full run isolation under `runs/<run_id>/`** | Prompts, logs, stage outputs, code, figures, and papers are all auditable. |
-| **Draft -> validate -> promote for stage summaries** | Half-finished summaries do not silently become official stage records. |
-| **Artifact-aware validation** | Later stages must produce data, results, figures, LaTeX, PDF, and review assets, not just prose. |
-| **Resume and redo-stage support** | Long runs are recoverable and partially repeatable. |
-| **Stage-local conversation continuation** | Refinement improves the current stage instead of constantly resetting context. |
-| **Venue-aware writing stage** | Stage 07 can target lightweight conference or journal-style paper packaging without pretending to be a full submission system. |
+| **Human-centered research execution** | AutoR is not an autonomous scientist. AI handles execution; humans own the direction at every stage boundary. |
+| **A research harness over Claude Code** | AutoR does not reinvent the coding agent. It constrains, validates, and operationalizes Claude Code inside a real research workflow. |
+| **Every run is a reproducible research artifact** | A run leaves behind prompts, logs, stage summaries, code, data, results, figures, paper sources, and approval trail under `runs/<run_id>/`. |
+| **Verifiable outputs, not paper-shaped theater** | AutoR does not ask "does this look conference-ready?" It asks "can you verify every claim with artifacts?" |
 
-### Core guarantees
+### What AutoR guarantees
 
-- A run is isolated under `runs/<run_id>/`.
-- Claude never writes directly to the final stage summary file.
 - Human approval is required before the workflow advances.
-- Approved summaries are appended to `memory.md`; failed attempts are not.
-- Stage 03+ must produce machine-readable data artifacts.
-- Stage 05+ must produce machine-readable result artifacts.
-- Stage 06+ must produce real figure files.
-- Stage 07+ must produce a venue-aware manuscript package with a PDF.
-- Stage 08+ must produce review and readiness materials.
+- Approved summaries become the only cross-stage memory.
+- Every run is isolated, resumable, and auditable.
+- Later stages must produce real artifacts, not only prose.
+- Claude Code is the execution layer; AutoR is the research control loop above it.
+
+### The key difference
+
+Many systems aim to generate papers that *look* ready.
+
+AutoR takes a harder path:
+
+- it requires real experiments
+- it enforces artifact validation
+- it keeps humans in control
+
+So the question is not:
+
+> Does it look ready?
+
+It is:
+
+> Can you verify every part of it?
 
 ## 🌟 Showcase
 
@@ -94,7 +103,7 @@ That run produced:
 Highlighted outcomes from that run:
 
 - `AGSNv2` reached **36.21 ± 1.08** on Actor
-- the system produced a full NeurIPS-style paper package
+- the system produced a full manuscript package with real figures and artifacts
 - the final run preserved the full human-in-the-loop approval trail
 
 ### Terminal Experience
@@ -180,6 +189,12 @@ python main.py
 python main.py --goal "Your research goal here"
 ```
 
+### Start with preloaded resources
+
+```bash
+python main.py --goal "Your research goal here" --resources paper.pdf refs.bib data.csv
+```
+
 ### Run a local smoke test without Claude
 
 ```bash
@@ -208,13 +223,16 @@ If `--venue` is omitted, AutoR defaults to `neurips_2025`.
 ```bash
 python main.py --resume-run latest
 python main.py --resume-run 20260329_210252 --redo-stage 03
+python main.py --resume-run 20260329_210252 --rollback-stage 03
 ```
 
 Valid stage identifiers include `03`, `3`, and `03_study_design`.
 
 ## ⚙️ How It Works
 
-AutoR uses a fixed 8-stage pipeline:
+AutoR uses an optional intake step followed by a fixed 8-stage pipeline:
+
+0. `00_intake` (optional)
 
 1. `01_literature_survey`
 2. `02_hypothesis_generation`
@@ -227,7 +245,14 @@ AutoR uses a fixed 8-stage pipeline:
 
 ```mermaid
 flowchart TD
-    A[Start or resume run] --> S1[01 Literature Survey]
+    A[Start or resume run] --> G0{Skip intake?}
+    G0 -- Yes --> S1[01 Literature Survey]
+    G0 -- No --> I0[00 Intake]
+    I0 --> H0{Human approval}
+    H0 -- Refine --> I0
+    H0 -- Approve --> S1[01 Literature Survey]
+    H0 -- Abort --> X[Abort]
+
     S1 --> H1{Human approval}
     H1 -- Refine --> S1
     H1 -- Approve --> S2[02 Hypothesis Generation]
@@ -279,13 +304,13 @@ flowchart TD
     D --> E{Valid?}
     E -- No --> F[Repair, normalize, or rerun current stage]
     F --> A
-    E -- Yes --> G[Promote draft to final stage summary]
+    E -- Yes --> G[Present validated draft for human review]
     G --> H{Human choice}
     H -- 1 or 2 or 3 --> I[Continue current stage conversation with AI refinement]
     I --> A
     H -- 4 --> J[Continue current stage conversation with custom feedback]
     J --> A
-    H -- 5 --> K[Append approved summary to memory.md]
+    H -- 5 --> K[Promote approved summary and append to memory.md]
     K --> L[Continue to next stage]
     H -- 6 --> X[Abort]
 ```
@@ -308,7 +333,7 @@ AutoR does not consider a run successful just because it generated a plausible m
 | Stage 03+ | Machine-readable data under `workspace/data/` |
 | Stage 05+ | Machine-readable results under `workspace/results/` |
 | Stage 06+ | Real figure files under `workspace/figures/` |
-| Stage 07+ | Venue-aware manuscript sources plus a compiled PDF |
+| Stage 07+ | Manuscript sources plus a compiled PDF |
 | Stage 08+ | Review and readiness assets under `workspace/reviews/` |
 
 Required stage summary shape:
@@ -343,10 +368,14 @@ runs/<run_id>/
 ├── user_input.txt
 ├── memory.md
 ├── run_config.json
+├── run_manifest.json
+├── artifact_index.json
+├── intake_context.json
 ├── logs.txt
 ├── logs_raw.jsonl
 ├── prompt_cache/
 ├── operator_state/
+├── handoff/
 ├── stages/
 └── workspace/
     ├── literature/
@@ -381,8 +410,9 @@ For each stage attempt, AutoR assembles a prompt from:
 3. execution-discipline constraints
 4. `user_input.txt`
 5. approved `memory.md`
-6. optional refinement feedback
-7. for continuation attempts, the current draft/final stage files and workspace context
+6. `intake_context.json`, `artifact_index.json`, and, when available, `experiment_manifest.json`
+7. optional refinement feedback
+8. for continuation attempts, the current draft/final stage files and workspace context
 
 The assembled prompt is written to `runs/<run_id>/prompt_cache/`, per-stage session IDs are stored in `runs/<run_id>/operator_state/`, and Claude is invoked in live streaming mode.
 
@@ -430,29 +460,43 @@ The main code lives in:
 - [main.py](main.py)
 - [src/manager.py](src/manager.py)
 - [src/operator.py](src/operator.py)
+- [src/intake.py](src/intake.py)
+- [src/manifest.py](src/manifest.py)
+- [src/artifact_index.py](src/artifact_index.py)
+- [src/experiment_manifest.py](src/experiment_manifest.py)
 - [src/utils.py](src/utils.py)
 - [src/writing_manifest.py](src/writing_manifest.py)
+- [src/platform/foundry.py](src/platform/foundry.py)
 - [src/prompts/](src/prompts)
 
 ```mermaid
 flowchart LR
     A[main.py] --> B[src/manager.py]
     B --> C[src/operator.py]
-    B --> D[src/utils.py]
-    B --> E[src/writing_manifest.py]
-    B --> F[src/prompts/*]
-    C --> D
+    B --> D[src/intake.py]
+    B --> E[src/manifest.py]
+    B --> F[src/artifact_index.py]
+    B --> G[src/experiment_manifest.py]
+    B --> H[src/utils.py]
+    B --> I[src/writing_manifest.py]
+    B --> J[src/platform/foundry.py]
+    B --> K[src/prompts/*]
+    C --> H
 ```
 
 File boundaries:
 
-- [main.py](main.py): CLI entry point. Starts a new run or resumes an existing run.
-- [src/manager.py](src/manager.py): Owns the 8-stage loop, approval flow, repair flow, resume, redo-stage logic, and stage-level continuation policy.
-- [src/operator.py](src/operator.py): Invokes Claude CLI, streams output live, persists stage session IDs, resumes the same stage conversation for refinement, and falls back to a fresh session if resume fails.
-- [src/utils.py](src/utils.py): Stage metadata, prompt assembly, run paths, markdown validation, and artifact validation.
+- [main.py](main.py): CLI entry point. Starts a new run, resumes an existing run, collects resources, and exposes redo/rollback controls.
+- [src/manager.py](src/manager.py): Owns intake plus the 8-stage loop, approval flow, repair flow, resume/redo/rollback logic, and stage-level continuation policy.
+- [src/operator.py](src/operator.py): Invokes Claude CLI, streams output live, persists stage session state, resumes the same stage conversation for refinement, and falls back to a fresh session if resume fails.
+- [src/intake.py](src/intake.py): Resource ingestion, intake context persistence, and prompt formatting for preloaded materials.
+- [src/manifest.py](src/manifest.py): Lightweight run lifecycle state, stage status tracking, and rollback/stale invalidation.
+- [src/artifact_index.py](src/artifact_index.py): Run-wide artifact indexing over data, results, and figures.
+- [src/experiment_manifest.py](src/experiment_manifest.py): Standardized experiment bundle summary used by later stages.
+- [src/utils.py](src/utils.py): Stage metadata, prompt assembly, run paths, markdown validation, artifact validation, and handoff helpers.
 - [src/prompts/](src/prompts): Per-stage prompt templates.
 
-## 📂 Run Layout
+## 🗂️ Run State
 
 Each run contains `user_input.txt`, `memory.md`, `run_manifest.json`, `artifact_index.json`, `prompt_cache/`, `operator_state/`, `stages/`, `workspace/`, `logs.txt`, and `logs_raw.jsonl`. The substantive research payload lives in `workspace/`.
 
@@ -532,16 +576,20 @@ A run with only markdown notes does not pass validation.
 
 ### Included in the current mainline
 
+- optional intake stage and resource ingestion
 - fixed 8-stage workflow
 - mandatory human approval after every stage
-- one primary Claude invocation per stage attempt
+- Claude Code as the execution layer
 - stage-local continuation within the same Claude session
 - prompt caching via `@file`
 - live streaming terminal output
 - repair passes and local fallback normalization
-- draft-to-final stage promotion
+- run manifest, rollback, and stale tracking
+- artifact index and experiment manifest
+- stage handoff context
+- paper/release package generation after approval
 - artifact-aware validation
-- resume and `--redo-stage`
+- resume, `--redo-stage`, and `--rollback-stage`
 - lightweight venue profiles for Stage 07 writing
 
 ### Intentionally out of scope
