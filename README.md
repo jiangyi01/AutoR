@@ -1,4 +1,4 @@
-<h1 align="center">AutoR: Human-centered Research Execution
+<h1 align="center">AutoR: Human-centered. AI-executed research.
 
 <p align="center">
 <b>AI handles the execution load. Humans steer the research direction.</b>
