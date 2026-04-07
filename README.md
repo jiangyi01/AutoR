@@ -1,13 +1,12 @@
 <h1 align="center">AutoR: A Human-Centered Research Harness</h1>
 
 <p align="center">
-<sub>
-<b>AI handles execution. Humans own the direction.</b>
-<br />
-A terminal-first research harness over Claude Code that turns long, messy research work into reproducible, artifact-backed runs.
-</sub>
+  <strong>AI handles execution. Humans own the direction.</strong>
 </p>
 
+<p align="center">
+  A terminal-first research harness over Claude Code that turns long, messy research work into reproducible, artifact-backed runs.
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue" alt="Python 3.10+" />
@@ -22,7 +21,7 @@ A terminal-first research harness over Claude Code that turns long, messy resear
 </p>
 
 <p align="center">
-  <a href="#-why-autor">Why AutoR</a>
+  <a href="#overview">Overview</a>
   ·
   <a href="#-showcase">Showcase</a>
   ·
@@ -41,19 +40,20 @@ A terminal-first research harness over Claude Code that turns long, messy resear
   <img src="assets/examples/example_fig6_two_layer.png" alt="AutoR example figure" width="92%" />
 </p>
 
+---
 
 > AutoR is not a chat demo, not a generic agent framework, and not a markdown-only research toy.
 >
 > It is a structured research harness over Claude Code:
 > **AI handles execution, humans own the direction, and every run becomes an inspectable research artifact on disk.**
 
-## ✨ Why AutoR
+## Overview
 
 Most autoresearch systems optimize for autonomy.
 
 AutoR takes a different position: research is too important to hand over as a blind end-to-end loop. The goal is not to remove humans from research. The goal is to give them a stronger execution system.
 
-### Four design commitments
+### Highlights
 
 | Commitment | Why it matters |
 | --- | --- |
@@ -62,7 +62,7 @@ AutoR takes a different position: research is too important to hand over as a bl
 | **Every run is a reproducible research artifact** | A run leaves behind prompts, logs, stage summaries, code, data, results, figures, paper sources, and approval trail under `runs/<run_id>/`. |
 | **Verifiable outputs, not paper-shaped theater** | AutoR does not ask "does this look conference-ready?" It asks "can you verify every claim with artifacts?" |
 
-### What AutoR guarantees
+### What AutoR Guarantees
 
 - Human approval is required before the workflow advances.
 - Approved summaries become the only cross-stage memory.
@@ -70,7 +70,7 @@ AutoR takes a different position: research is too important to hand over as a bl
 - Later stages must produce real artifacts, not only prose.
 - Claude Code is the execution layer; AutoR is the research control loop above it.
 
-### The key difference
+### Why AutoR?
 
 Many systems aim to generate papers that *look* ready.
 
