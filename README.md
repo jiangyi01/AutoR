@@ -1,4 +1,4 @@
-<h1 align="center">AutoR: A Human-Centered Research Harness</h1>
+<h1 align="center">AutoR: A Human-Centered Research OS</h1>
 
 <p align="center">
   <strong>AI handles execution. Humans own the direction.</strong>
