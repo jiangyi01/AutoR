@@ -1,4 +1,4 @@
-<h1 align="center">AutoR: Human-centered. AI-executed research.
+<h1 align="center">AutoR: Human-centered Research Harness. 
 
 <p align="center">
 <sub>
