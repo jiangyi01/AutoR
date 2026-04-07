@@ -33,6 +33,7 @@ from .manifest import (
 )
 from .operator import ClaudeOperator
 from .platform.foundry import generate_paper_package, generate_release_package
+from .terminal_ui import TerminalUI
 from .writing_manifest import build_writing_manifest, format_manifest_for_prompt
 from .utils import (
     INTAKE_STAGE,
@@ -99,6 +100,12 @@ class ResearchManager:
             intake_approved = self._run_intake(paths)
             if not intake_approved:
                 append_log_entry(paths.logs, "run_aborted", "Run aborted during intake.")
+                update_manifest_run_status(
+                    paths,
+                    run_status="cancelled",
+                    last_event="run.cancelled",
+                    current_stage_slug=INTAKE_STAGE.slug,
+                )
                 self.ui.show_status("Run aborted.", level="warn")
                 return False
 
@@ -550,23 +557,20 @@ class ResearchManager:
 
                 result = repair_result
 
-            final_stage_path = paths.stage_file(stage)
-            shutil.copyfile(result.stage_file_path, final_stage_path)
-            append_log_entry(
-                paths.logs,
-                f"{stage.slug} attempt {attempt_no} promoted",
-                (
-                    "Promoted validated stage summary draft to final stage file.\n"
-                    f"draft: {result.stage_file_path}\n"
-                    f"final: {final_stage_path}"
-                ),
-            )
-            stage_markdown = read_text(final_stage_path)
+            stage_markdown = read_text(result.stage_file_path)
             mark_stage_human_review_manifest(
                 paths,
                 stage,
                 attempt_no,
                 self._stage_file_paths(stage_markdown),
+            )
+            append_log_entry(
+                paths.logs,
+                f"{stage.slug} attempt {attempt_no} awaiting_human_review",
+                (
+                    "Validated stage summary draft is ready for human review.\n"
+                    f"draft: {result.stage_file_path}"
+                ),
             )
 
             suggestions = parse_refinement_suggestions(stage_markdown)
