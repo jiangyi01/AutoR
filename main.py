@@ -177,8 +177,12 @@ def main() -> int:
             operator=operator,
             ui=ui,
         )
-        manager.resume_run(run_root, start_stage=start_stage or rollback_stage, venue=venue, rollback_stage=rollback_stage)
-        return 0
+        return 0 if manager.resume_run(
+            run_root,
+            start_stage=start_stage or rollback_stage,
+            venue=venue,
+            rollback_stage=rollback_stage,
+        ) else 1
 
     model = args.model or "sonnet"
     venue = resolve_venue_key(args.venue or DEFAULT_VENUE)
