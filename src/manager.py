@@ -67,11 +67,13 @@ from .utils import (
     load_prompt_template,
     mark_stage_execution_started,
     parse_refinement_suggestions,
+    read_attempt_count,
     read_text,
     required_stage_output_template,
     truncate_text,
     validate_stage_artifacts,
     validate_stage_markdown,
+    write_attempt_count,
     write_stage_handoff,
     write_text,
 )
@@ -581,13 +583,14 @@ class ResearchManager:
     # ------------------------------------------------------------------
 
     def _run_stage(self, paths: RunPaths, stage: StageSpec) -> bool:
-        attempt_no = 1
+        attempt_no = read_attempt_count(paths, stage) + 1
         revision_feedback: str | None = None
         continue_session = False
         mark_stage_execution_started(paths, stage)
 
         while True:
             mark_stage_running_manifest(paths, stage, attempt_no)
+            write_attempt_count(paths, stage, attempt_no)
             self._print(f"\nRunning {stage.stage_title} (attempt {attempt_no})...")
             prompt = self._build_stage_prompt(paths, stage, revision_feedback, continue_session)
             append_log_entry(
