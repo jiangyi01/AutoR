@@ -148,53 +148,65 @@ AutoR is designed for terminal-first execution, but the interaction layer is not
   </tr>
 </table>
 
-### Paper Preview
+### Paper Gallery
+
+AutoR already has a growing set of full-paper outputs. Instead of showing a single preview page in isolation, the gallery below uses a consistent 4 × 2 layout: four papers, two representative pages from each, with a short note on what each manuscript is demonstrating.
 
 <table>
   <tr>
-    <td align="center" valign="top">
-      <strong>Page 1</strong><br />
-      Title, abstract, framing<br />
-      <img src="assets/examples/example_paper_page1.png" alt="Example paper page 1" width="220" />
+    <td valign="top" width="23%">
+      <strong>Paper 1</strong><br />
+      A complete end-to-end AutoR manuscript. The pair below shows the opening framing page and a later quantitative page with the main tables.
     </td>
     <td align="center" valign="top">
-      <strong>Page 5</strong><br />
-      Method and training algorithm<br />
-      <img src="assets/examples/example_paper_page5.png" alt="Example paper page 5" width="220" />
+      <img src="assets/examples/example_paper_page1.png" alt="Paper 1 page 1" width="220" /><br />
+      <strong>Page 1</strong>
     </td>
     <td align="center" valign="top">
-      <strong>Page 7</strong><br />
-      Main tables and per-seed results<br />
-      <img src="assets/examples/example_paper_page7.png" alt="Example paper page 7" width="220" />
+      <img src="assets/examples/example_paper_page7.png" alt="Paper 1 results page" width="220" /><br />
+      <strong>Results Page</strong>
     </td>
   </tr>
-</table>
-
-### Additional Paper Pages
-
-AutoR is not represented by a single canonical manuscript. In addition to the main example run, we also use a broader set of full-paper outputs as visual materials for the project. The clipped pages below show a mix of title framing, result-heavy pages, system-overview visuals, and later-stage quantitative analysis across multiple papers produced with the same workflow.
-
-<table>
   <tr>
-    <td align="center" valign="top">
-      <strong>Paper Page 1</strong><br />
-      Full paper framing and abstract<br />
-      <img src="assets/community_papers/other_run_1_page1.png" alt="Additional paper page 1" width="220" />
+    <td valign="top" width="23%">
+      <strong>Paper 2</strong><br />
+      <em>Do More Experts Help?</em> A parameter-matched MoE-LoRA study. The selected pages show the manuscript framing and a result page with comparative bar charts.
     </td>
     <td align="center" valign="top">
-      <strong>Results Page</strong><br />
-      Comparative bars and evaluation summary<br />
-      <img src="assets/community_papers/other_run_1_results.png" alt="Additional paper results page" width="220" />
+      <img src="assets/community_papers/other_run_1_page1.png" alt="Paper 2 page 1" width="220" /><br />
+      <strong>Page 1</strong>
     </td>
     <td align="center" valign="top">
-      <strong>Overview Page</strong><br />
-      Structured visual breakdown of the method<br />
-      <img src="assets/community_papers/other_run_2_overview.png" alt="Additional paper overview page" width="220" />
+      <img src="assets/community_papers/other_run_1_results.png" alt="Paper 2 results page" width="220" /><br />
+      <strong>Results Page</strong>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top" width="23%">
+      <strong>Paper 3</strong><br />
+      <em>Attention Sink Onset in Tiny Transformers</em> A controlled factorial study. The chosen pages show the opening page and a later system-overview page with structured visual decomposition.
     </td>
     <td align="center" valign="top">
-      <strong>Analysis Page</strong><br />
-      Dense plots from a later quantitative section<br />
-      <img src="assets/community_papers/other_run_3_results.png" alt="Additional paper analysis page" width="220" />
+      <img src="assets/community_papers/other_run_2_page1.png" alt="Paper 3 page 1" width="220" /><br />
+      <strong>Page 1</strong>
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_2_overview.png" alt="Paper 3 overview page" width="220" /><br />
+      <strong>Overview Page</strong>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top" width="23%">
+      <strong>Paper 4</strong><br />
+      <em>HSOD: Harmonic Spectral Operator Decomposition</em> A stability-focused time-series paper. The pair below shows the framing page and a later page with dense training-dynamics plots.
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_3_page1.png" alt="Paper 4 page 1" width="220" /><br />
+      <strong>Page 1</strong>
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_3_results.png" alt="Paper 4 analysis page" width="220" /><br />
+      <strong>Analysis Page</strong>
     </td>
   </tr>
 </table>
