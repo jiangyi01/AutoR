@@ -66,7 +66,7 @@ def _resolve_api_key() -> str | None:
 # Style guide (embedded subset of PaperBanana NeurIPS 2025 diagram guide)
 # ---------------------------------------------------------------------------
 
-NEURIPS_STYLE_GUIDE = """\
+NEURIPS_STYLE_GUIDE = r"""\
 ### 1. The "NeurIPS Look"
 The prevailing aesthetic for 2025 is **"Soft Tech & Scientific Pastels."**
 Gone are the days of harsh primary colors and sharp black boxes. The modern NeurIPS diagram feels approachable yet precise. It utilizes high-value (light) backgrounds to organize complexity, reserving saturation for the most critical active elements. The vibe balances **clean modularity** (clear separation of parts) with **narrative flow** (clear left-to-right progression).

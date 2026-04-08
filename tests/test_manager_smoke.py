@@ -9,8 +9,10 @@ from unittest.mock import patch
 
 from src.manager import ResearchManager
 from src.manifest import load_run_manifest
+from src.project_bootstrap import StageAssessment
 from src.utils import (
     DEFAULT_REFINEMENT_SUGGESTIONS,
+    INTAKE_STAGE,
     STAGES,
     OperatorResult,
     approved_stage_summaries,
@@ -32,6 +34,7 @@ class ScriptedSmokeOperator:
         self.model = "smoke-test-model"
         self.invocations: dict[str, int] = {}
         self.continue_modes: dict[str, list[bool]] = {}
+        self.prompts: dict[str, list[str]] = {}
 
     def run_stage(
         self,
@@ -44,6 +47,7 @@ class ScriptedSmokeOperator:
         invocation = self.invocations.get(stage.slug, 0) + 1
         self.invocations[stage.slug] = invocation
         self.continue_modes.setdefault(stage.slug, []).append(continue_session)
+        self.prompts.setdefault(stage.slug, []).append(prompt)
         produced = self._materialize_artifacts(stage, paths, invocation)
         stage_file = paths.stage_tmp_file(stage)
         write_text(
@@ -78,6 +82,66 @@ class ScriptedSmokeOperator:
 
     def _materialize_artifacts(self, stage, paths, invocation: int) -> list[str]:
         produced: list[str] = []
+
+        if stage.slug == "bootstrap":
+            profile_files = {
+                paths.profile_dir / "research_profile.json": json.dumps(
+                    {
+                        "themes": ["reasoning"],
+                        "terminology": ["chain-of-thought"],
+                        "methods": ["prompting"],
+                        "venues": ["NeurIPS"],
+                        "confidence": "medium",
+                        "summary": "Researcher focused on reasoning workflows.",
+                    }
+                ),
+                paths.profile_dir / "citation_neighborhood.json": json.dumps(
+                    {
+                        "frequently_cited": [
+                            {"title": "Chain-of-Thought Prompting", "authors": "Wei et al.", "year": "2022"},
+                        ],
+                        "related_authors": ["Wei et al."],
+                        "key_venues": ["NeurIPS"],
+                        "seed_papers": [
+                            {
+                                "title": "Chain-of-Thought Prompting",
+                                "authors": "Wei et al.",
+                                "year": "2022",
+                                "why": "Foundational reasoning prior.",
+                            }
+                        ],
+                    }
+                ),
+                paths.profile_dir / "style_profile.json": json.dumps(
+                    {
+                        "voice": "mixed",
+                        "person": "first_plural",
+                        "formality": "formal",
+                        "avg_section_count": 6,
+                        "section_ordering": ["Introduction", "Method", "Experiments", "Conclusion"],
+                        "abstract_pattern": "problem-method-result",
+                        "notation_conventions": ["boldface for vectors"],
+                        "paragraph_style": "topic-sentence-first",
+                        "notes": "Prefers concise academic prose.",
+                    }
+                ),
+                paths.profile_dir / "style_notes.md": "# Writing Style Profile\n\n- Formal and concise.\n",
+                paths.profile_dir / "bootstrap_summary.md": "This corpus suggests a reasoning-focused researcher profile.\n",
+                paths.profile_dir / "corpus_manifest.json": json.dumps(
+                    {
+                        "corpus_path": str(paths.run_root / "paper_corpus"),
+                        "scanned_at": "2026-04-08T00:00:00",
+                        "total_files_found": 2,
+                        "files_processed": 2,
+                        "files_skipped": 0,
+                        "skipped_reasons": [],
+                        "papers": [],
+                    }
+                ),
+            }
+            for path, content in profile_files.items():
+                write_text(path, content)
+                produced.append(relative_to_run(path, paths.run_root))
 
         note_path = paths.notes_dir / f"{stage.slug}_smoke_note.md"
         write_text(note_path, f"# Smoke Note\n\nStage: {stage.slug}\nInvocation: {invocation}\n")
@@ -194,6 +258,27 @@ class ScriptedSmokeOperator:
         )
 
 
+class BootstrapAdjustingSmokeOperator(ScriptedSmokeOperator):
+    def __init__(self, corrected_assessments: list[StageAssessment]) -> None:
+        super().__init__()
+        self.corrected_assessments = corrected_assessments
+
+    def run_stage(
+        self,
+        stage,
+        prompt: str,
+        paths,
+        attempt_no: int,
+        continue_session: bool = False,
+    ) -> OperatorResult:
+        if stage.slug == "project_bootstrap":
+            write_text(
+                paths.bootstrap_dir / "stage_assessments.json",
+                json.dumps([assessment.__dict__ for assessment in self.corrected_assessments], indent=2),
+            )
+        return super().run_stage(stage, prompt, paths, attempt_no, continue_session=continue_session)
+
+
 class ManagerSmokeTests(unittest.TestCase):
     def _run_roots(self, runs_dir: Path) -> list[Path]:
         return sorted(path for path in runs_dir.iterdir() if path.is_dir())
@@ -299,8 +384,126 @@ class ManagerSmokeTests(unittest.TestCase):
             self.assertIsNotNone(manifest)
             assert manifest is not None
             self.assertEqual(manifest.run_status, "cancelled")
-            self.assertEqual(manifest.current_stage_slug, STAGE_01.slug)
+            self.assertEqual(manifest.current_stage_slug, INTAKE_STAGE.slug)
             self.assertIsNone(manifest.completed_at)
+
+    def test_project_bootstrap_carries_forward_prior_stages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir, operator, manager = self._build_manager(tmp_dir)
+            project_root = Path(tmp_dir) / "existing_project"
+            project_root.mkdir()
+            for name in ["main.py", "model.py", "train.py", "data.py", "utils.py", "eval.py"]:
+                (project_root / name).write_text("# existing project code\n", encoding="utf-8")
+            (project_root / "requirements.txt").write_text("torch\n", encoding="utf-8")
+
+            with patch.object(manager, "_ask_choice", return_value="5"):
+                success = manager.run(
+                    "Adopt an existing project into AutoR.",
+                    venue="neurips_2025",
+                    project_root=project_root,
+                )
+
+            self.assertTrue(success)
+            run_root = self._run_roots(runs_dir)[0]
+            paths = build_run_paths(run_root)
+            manifest = load_run_manifest(paths.run_manifest)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+            for stage in STAGES[:4]:
+                entry = next(item for item in manifest.stages if item.slug == stage.slug)
+                self.assertTrue(entry.approved)
+                self.assertTrue(paths.stage_file(stage).exists())
+            self.assertNotIn(STAGE_01.slug, operator.invocations)
+            self.assertIn(STAGE_05.slug, operator.invocations)
+            memory_text = read_text(paths.memory)
+            self.assertIn("Stage 00: Research Intake", memory_text)
+            self.assertIn("Stage 01: Literature Survey", memory_text)
+            self.assertIn("Stage 04: Implementation", memory_text)
+            self.assertNotIn("Stage -1: Project Repo Bootstrap", memory_text)
+
+    def test_project_bootstrap_uses_corrected_stage_assessments_for_entry_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir = Path(tmp_dir) / "runs"
+            corrected = [
+                StageAssessment(1, "Literature Survey", "complete", "medium", ["bootstrap-approved"]),
+                StageAssessment(2, "Hypothesis Generation", "complete", "medium", ["bootstrap-approved"]),
+                StageAssessment(3, "Study Design", "not_started", "high", ["design gap remains"]),
+                StageAssessment(4, "Implementation", "complete", "high", ["implementation exists"]),
+                StageAssessment(5, "Experimentation", "not_started", "medium", ["no reliable experiment results"]),
+                StageAssessment(6, "Analysis", "not_started", "medium", ["no reliable analysis"]),
+                StageAssessment(7, "Writing", "not_started", "medium", ["no usable manuscript"]),
+                StageAssessment(8, "Dissemination", "not_started", "medium", ["no dissemination artifacts"]),
+            ]
+            operator = BootstrapAdjustingSmokeOperator(corrected)
+            manager = ResearchManager(
+                project_root=REPO_ROOT,
+                runs_dir=runs_dir,
+                operator=operator,
+                output_stream=io.StringIO(),
+            )
+            project_root = Path(tmp_dir) / "existing_project"
+            project_root.mkdir()
+            for name in ["main.py", "model.py", "train.py", "eval.py"]:
+                (project_root / name).write_text("# existing project code\n", encoding="utf-8")
+            (project_root / "requirements.txt").write_text("torch\n", encoding="utf-8")
+
+            with patch.object(manager, "_ask_choice", return_value="5"):
+                success = manager.run(
+                    "Adopt an existing project with a bootstrap correction.",
+                    venue="neurips_2025",
+                    project_root=project_root,
+                )
+
+            self.assertTrue(success)
+            self.assertIn(STAGES[2].slug, operator.invocations)
+            self.assertNotIn(STAGE_01.slug, operator.invocations)
+            self.assertNotIn(STAGES[1].slug, operator.invocations)
+
+    def test_paper_corpus_bootstrap_injects_profile_into_downstream_prompts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir, operator, manager = self._build_manager(tmp_dir)
+            corpus_root = Path(tmp_dir) / "paper_corpus"
+            corpus_root.mkdir()
+            (corpus_root / "paper.tex").write_text(
+                (
+                    "\\title{Prior Work}\n"
+                    "\\begin{document}\n"
+                    "\\begin{abstract}We study reasoning workflows.\\end{abstract}\n"
+                    "\\section{Introduction}Prior text.\n"
+                    "\\end{document}\n"
+                ),
+                encoding="utf-8",
+            )
+            (corpus_root / "refs.bib").write_text(
+                (
+                    "@article{cot2022,\n"
+                    "  title={Chain-of-Thought Prompting},\n"
+                    "  author={Wei et al.},\n"
+                    "  year={2022},\n"
+                    "  journal={NeurIPS}\n"
+                    "}\n"
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(manager, "_ask_choice", return_value="5"):
+                success = manager.run(
+                    "Use my prior papers to align the new project.",
+                    venue="neurips_2025",
+                    paper_corpus=corpus_root,
+                )
+
+            self.assertTrue(success)
+            run_root = self._run_roots(runs_dir)[0]
+            paths = build_run_paths(run_root)
+            self.assertIn("bootstrap", operator.invocations)
+            self.assertTrue((paths.profile_dir / "research_profile.json").exists())
+            self.assertTrue((paths.profile_dir / "style_profile.json").exists())
+            stage01_prompt = operator.prompts[STAGE_01.slug][0]
+            self.assertIn("Researcher Profile (from paper corpus bootstrap)", stage01_prompt)
+            self.assertIn("Seed papers for literature search", stage01_prompt)
+            memory_text = read_text(paths.memory)
+            self.assertNotIn("Stage -1", memory_text)
 
 
 if __name__ == "__main__":

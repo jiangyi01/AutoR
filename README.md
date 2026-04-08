@@ -1,27 +1,27 @@
-<h1 align="center">AutoR: Accelerating the AI Research Loop with Human-in-the-Loop Co-pilot </h1>
+<h1 align="center">AutoR: A Human-Centered Research OS</h1>
 
 <p align="center">
-<b>AI handles the execution load. Humans steer the research direction.</b>
-<br />
-A terminal-first, 8-stage pipeline that turns high-level goals into verifiable, venue-ready papers.
+  <strong>AI handles execution. Humans own the direction.</strong>
 </p>
 
-
+<p align="center">
+  A terminal-first research harness over Claude Code that turns long, messy research work into reproducible, artifact-backed runs.
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue" alt="Python 3.10+" />
-  <img src="https://img.shields.io/badge/Workflow-8%20Stages-black" alt="8 stages" />
+  <img src="https://img.shields.io/badge/Workflow-Intake%20%2B%208%20Stages-black" alt="Intake plus 8 stages" />
   <img src="https://img.shields.io/badge/Interface-Terminal--first-green" alt="Terminal-first" />
   <img src="https://img.shields.io/badge/Human-Approval%20Required-orange" alt="Human approval required" />
-  <img src="https://img.shields.io/badge/Artifacts-Real%20Research%20Outputs-red" alt="Real artifacts" />
-  <img src="https://img.shields.io/badge/Writing-Venue--aware%20Paper%20Packaging-purple" alt="Venue-aware writing" />
+  <img src="https://img.shields.io/badge/Execution-Claude%20Code%20Harness-purple" alt="Claude Code harness" />
+  <img src="https://img.shields.io/badge/Artifacts-Reproducible%20Research%20Runs-red" alt="Reproducible research runs" />
   <a href="https://github.com/HavenIntelligence/AutoR">
     <img src="https://img.shields.io/github/stars/HavenIntelligence/AutoR?style=social" alt="GitHub stars" />
   </a>
 </p>
 
 <p align="center">
-  <a href="#-why-autor">Why AutoR</a>
+  <a href="#overview">Overview</a>
   ·
   <a href="#-showcase">Showcase</a>
   ·
@@ -40,61 +40,84 @@ A terminal-first, 8-stage pipeline that turns high-level goals into verifiable, 
   <img src="assets/examples/example_fig6_two_layer.png" alt="AutoR example figure" width="92%" />
 </p>
 
+---
 
 > AutoR is not a chat demo, not a generic agent framework, and not a markdown-only research toy.
 >
-> It is a research execution loop:
-> **goal -> literature -> hypothesis -> design -> implementation -> experiments -> analysis -> paper -> dissemination**,
-> with explicit human control at every stage and real artifacts on disk.
+> It is a structured research harness over Claude Code:
+> **AI handles execution, humans own the direction, and every run becomes an inspectable research artifact on disk.**
 
-## ✨ Why AutoR
+## Overview
 
-Most AI research demos stop at "the model wrote a plausible summary."
+Most autoresearch systems optimize for autonomy.
 
-AutoR is built around a harder standard: the system should leave behind a run directory that another person can inspect, resume, audit, and critique.
+AutoR takes a different position: research is too important to hand over as a blind end-to-end loop. The goal is not to remove humans from research. The goal is to give them a stronger execution system.
 
-### What makes it different
+### At a Glance
 
-| AutoR does | Why it matters |
+| Dimension | AutoR |
 | --- | --- |
-| **Fixed 8-stage research workflow** | The system behaves like a real research process instead of a free-form chat loop. |
-| **Mandatory human approval after every stage** | AI executes; humans retain control at high-leverage decision points. |
-| **Full run isolation under `runs/<run_id>/`** | Prompts, logs, stage outputs, code, figures, and papers are all auditable. |
-| **Draft -> validate -> promote for stage summaries** | Half-finished summaries do not silently become official stage records. |
-| **Artifact-aware validation** | Later stages must produce data, results, figures, LaTeX, PDF, and review assets, not just prose. |
-| **Resume and redo-stage support** | Long runs are recoverable and partially repeatable. |
-| **Stage-local conversation continuation** | Refinement improves the current stage instead of constantly resetting context. |
-| **Venue-aware writing stage** | Stage 07 can target lightweight conference or journal-style paper packaging without pretending to be a full submission system. |
+| Execution model | Claude Code as the execution layer, AutoR as the research control loop |
+| Control model | Human approval required after every stage |
+| Research unit | A reproducible run under `runs/<run_id>/` |
+| Workflow shape | Optional intake plus a fixed 8-stage pipeline |
+| Quality bar | Artifact-backed outputs, not markdown-only summaries |
+| Recovery | Resume, redo-stage, rollback-stage, stage-local continuation |
 
-### Core guarantees
+### Highlights
 
-- A run is isolated under `runs/<run_id>/`.
-- Claude never writes directly to the final stage summary file.
+| Commitment | Why it matters |
+| --- | --- |
+| **Human-centered research execution** | AutoR is not an autonomous scientist. AI handles execution; humans own the direction at every stage boundary. |
+| **A research harness over Claude Code** | AutoR does not reinvent the coding agent. It constrains, validates, and operationalizes Claude Code inside a real research workflow. |
+| **Every run is a reproducible research artifact** | A run leaves behind prompts, logs, stage summaries, code, data, results, figures, writing sources, compiled artifacts, and approval trail under `runs/<run_id>/`. |
+| **Verifiable outputs, not paper-shaped theater** | AutoR does not ask "does this look conference-ready?" It asks "can you verify every claim with artifacts?" |
+
+### What AutoR Guarantees
+
 - Human approval is required before the workflow advances.
-- Approved summaries are appended to `memory.md`; failed attempts are not.
-- Stage 03+ must produce machine-readable data artifacts.
-- Stage 05+ must produce machine-readable result artifacts.
-- Stage 06+ must produce real figure files.
-- Stage 07+ must produce a venue-aware manuscript package with a PDF.
-- Stage 08+ must produce review and readiness materials.
+- Approved summaries become the only cross-stage memory.
+- Every run is isolated, resumable, and auditable.
+- Later stages must produce real artifacts, not only prose.
+- Claude Code is the execution layer; AutoR is the research control loop above it.
+
+### Why AutoR?
+
+Many systems aim to generate research outputs that *look* ready.
+
+AutoR takes a harder path:
+
+- it requires real experiments
+- it enforces artifact validation
+- it keeps humans in control
+
+So the question is not:
+
+> Does it look ready?
+
+It is:
+
+> Can you verify every part of it?
 
 ## 🌟 Showcase
 
 AutoR already has a full example run used throughout the repository: `runs/20260330_101222`.
 
-That run produced:
+### Example Run Snapshot
 
-- a compiled paper PDF: [example_paper.pdf](assets/examples/example_paper.pdf)
-- executable research code
-- machine-readable datasets and result files
-- real figures used in the paper
-- review and dissemination materials
+| What the run produced | What it demonstrates |
+| --- | --- |
+| [example_paper.pdf](assets/examples/example_paper.pdf) | A compiled manuscript artifact within a broader research package |
+| Executable research code | The run is not just a writing pipeline |
+| Machine-readable datasets and result files | Claims are backed by inspectable experiment outputs |
+| Real figures used in the research package | The run produces publication-style visuals, not placeholders |
+| Review and dissemination materials | The workflow continues past writing into release readiness |
 
 Highlighted outcomes from that run:
 
-- `AGSNv2` reached **36.21 ± 1.08** on Actor
-- the system produced a full NeurIPS-style paper package
-- the final run preserved the full human-in-the-loop approval trail
+- `AGSNv2` reached **36.21 ± 1.08** on Actor.
+- The system produced a full research package with real figures, writing sources, and auditable artifacts.
+- The final run preserved the full human-in-the-loop approval trail.
 
 ### Terminal Experience
 
@@ -125,24 +148,65 @@ AutoR is designed for terminal-first execution, but the interaction layer is not
   </tr>
 </table>
 
-### Paper Preview
+### Research Output Gallery
+
+The manuscript pages below are only the visible surface of larger AutoR runs. To keep the showcase compact and comparable, this gallery uses a consistent 4 × 2 layout: four artifact-backed research outputs, two representative pages from each, and a short note on what each run is demonstrating.
 
 <table>
   <tr>
-    <td align="center" valign="top">
-      <strong>Page 1</strong><br />
-      Title, abstract, framing<br />
-      <img src="assets/examples/example_paper_page1.png" alt="Example paper page 1" width="220" />
+    <td valign="top" width="23%">
+      <strong>Output 1</strong><br />
+      A complete end-to-end AutoR run. The pair below shows the opening manuscript page and a later evidence-heavy page where algorithm, tables, and quantitative results appear together.
     </td>
     <td align="center" valign="top">
-      <strong>Page 5</strong><br />
-      Method and training algorithm<br />
-      <img src="assets/examples/example_paper_page5.png" alt="Example paper page 5" width="220" />
+      <img src="assets/examples/example_paper_page1.png" alt="Output 1 page 1" width="220" /><br />
+      <strong>Page 1</strong>
     </td>
     <td align="center" valign="top">
-      <strong>Page 7</strong><br />
-      Main tables and per-seed results<br />
-      <img src="assets/examples/example_paper_page7.png" alt="Example paper page 7" width="220" />
+      <img src="assets/examples/example_paper_page5.png" alt="Output 1 evidence page" width="220" /><br />
+      <strong>Evidence Page</strong>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top" width="23%">
+      <strong>Output 2</strong><br />
+      <em>Do More Experts Help?</em> A parameter-matched MoE-LoRA study. The selected pages show the framing page and a chart-heavy evidence page.
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_1_page1.png" alt="Output 2 page 1" width="220" /><br />
+      <strong>Page 1</strong>
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_1_results.png" alt="Output 2 evidence page" width="220" /><br />
+      <strong>Evidence Page</strong>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top" width="23%">
+      <strong>Output 3</strong><br />
+      <em>Attention Sink Onset in Tiny Transformers</em> A controlled factorial study. The chosen pages show the opening page and a later structured overview page with visual decomposition.
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_2_page1.png" alt="Output 3 page 1" width="220" /><br />
+      <strong>Page 1</strong>
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_2_overview.png" alt="Output 3 overview page" width="220" /><br />
+      <strong>Overview Page</strong>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top" width="23%">
+      <strong>Output 4</strong><br />
+      <em>HSOD: Harmonic Spectral Operator Decomposition</em> A stability-focused time-series study. The pair below shows the framing page and a later page with dense training-dynamics plots.
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_3_page1.png" alt="Output 4 page 1" width="220" /><br />
+      <strong>Page 1</strong>
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_3_results.png" alt="Output 4 analysis page" width="220" /><br />
+      <strong>Analysis Page</strong>
     </td>
   </tr>
 </table>
@@ -170,53 +234,29 @@ AI handles execution load; humans steer the research when direction actually mat
   - `pip install google-genai` (the `google.genai` SDK is **not** a default dependency; if it is missing the diagram step prints `Diagram generation failed: No module named 'google'` and the rest of the run continues unaffected)
   - A Gemini API key exposed via `GOOGLE_API_KEY` or `GEMINI_API_KEY`, or a local `configs/diagram_config.yaml` (see `configs/diagram_config.template.yaml`)
 
-### Start a new run
+### Common Commands
 
-```bash
-python main.py
-```
-
-### Start with an explicit goal
-
-```bash
-python main.py --goal "Your research goal here"
-```
-
-### Run a local smoke test without Claude
-
-```bash
-python main.py --fake-operator --goal "Smoke test"
-```
-
-### Choose a Claude model
-
-```bash
-python main.py --model sonnet
-python main.py --model opus
-```
-
-### Choose a writing venue profile
-
-```bash
-python main.py --venue neurips_2025
-python main.py --venue nature
-python main.py --venue jmlr
-```
+| Goal | Command |
+| --- | --- |
+| Start a new run | `python main.py` |
+| Start with an explicit goal | `python main.py --goal "Your research goal here"` |
+| Start with preloaded resources | `python main.py --goal "Your research goal here" --resources paper.pdf refs.bib data.csv` |
+| Run a local smoke test without Claude | `python main.py --fake-operator --goal "Smoke test"` |
+| Choose a Claude model | `python main.py --model sonnet` or `python main.py --model opus` |
+| Choose a writing venue profile | `python main.py --venue neurips_2025` or `python main.py --venue nature` or `python main.py --venue jmlr` |
+| Resume the latest run | `python main.py --resume-run latest` |
+| Redo a stage inside the same run | `python main.py --resume-run 20260329_210252 --redo-stage 03` |
+| Roll back to a stage inside the same run | `python main.py --resume-run 20260329_210252 --rollback-stage 03` |
 
 If `--venue` is omitted, AutoR defaults to `neurips_2025`.
-
-### Resume or redo work inside the same run
-
-```bash
-python main.py --resume-run latest
-python main.py --resume-run 20260329_210252 --redo-stage 03
-```
 
 Valid stage identifiers include `03`, `3`, and `03_study_design`.
 
 ## ⚙️ How It Works
 
-AutoR uses a fixed 8-stage pipeline:
+AutoR uses an optional intake step followed by a fixed 8-stage pipeline:
+
+0. `00_intake` (optional)
 
 1. `01_literature_survey`
 2. `02_hypothesis_generation`
@@ -229,7 +269,14 @@ AutoR uses a fixed 8-stage pipeline:
 
 ```mermaid
 flowchart TD
-    A[Start or resume run] --> S1[01 Literature Survey]
+    A[Start or resume run] --> G0{Skip intake?}
+    G0 -- Yes --> S1[01 Literature Survey]
+    G0 -- No --> I0[00 Intake]
+    I0 --> H0{Human approval}
+    H0 -- Refine --> I0
+    H0 -- Approve --> S1[01 Literature Survey]
+    H0 -- Abort --> X[Abort]
+
     S1 --> H1{Human approval}
     H1 -- Refine --> S1
     H1 -- Approve --> S2[02 Hypothesis Generation]
@@ -281,13 +328,13 @@ flowchart TD
     D --> E{Valid?}
     E -- No --> F[Repair, normalize, or rerun current stage]
     F --> A
-    E -- Yes --> G[Promote draft to final stage summary]
+    E -- Yes --> G[Present validated draft for human review]
     G --> H{Human choice}
     H -- 1 or 2 or 3 --> I[Continue current stage conversation with AI refinement]
     I --> A
     H -- 4 --> J[Continue current stage conversation with custom feedback]
     J --> A
-    H -- 5 --> K[Append approved summary to memory.md]
+    H -- 5 --> K[Promote approved summary and append to memory.md]
     K --> L[Continue to next stage]
     H -- 6 --> X[Abort]
 ```
@@ -310,7 +357,7 @@ AutoR does not consider a run successful just because it generated a plausible m
 | Stage 03+ | Machine-readable data under `workspace/data/` |
 | Stage 05+ | Machine-readable results under `workspace/results/` |
 | Stage 06+ | Real figure files under `workspace/figures/` |
-| Stage 07+ | Venue-aware manuscript sources plus a compiled PDF |
+| Stage 07+ | Manuscript sources plus a compiled PDF |
 | Stage 08+ | Review and readiness assets under `workspace/reviews/` |
 
 Required stage summary shape:
@@ -345,10 +392,14 @@ runs/<run_id>/
 ├── user_input.txt
 ├── memory.md
 ├── run_config.json
+├── run_manifest.json
+├── artifact_index.json
+├── intake_context.json
 ├── logs.txt
 ├── logs_raw.jsonl
 ├── prompt_cache/
 ├── operator_state/
+├── handoff/
 ├── stages/
 └── workspace/
     ├── literature/
@@ -362,7 +413,7 @@ runs/<run_id>/
     └── reviews/
 ```
 
-### Directory semantics
+### Workspace Directory Semantics
 
 - `literature/`: reading notes, survey tables, benchmark notes
 - `code/`: runnable code, scripts, configs, implementations
@@ -383,8 +434,9 @@ For each stage attempt, AutoR assembles a prompt from:
 3. execution-discipline constraints
 4. `user_input.txt`
 5. approved `memory.md`
-6. optional refinement feedback
-7. for continuation attempts, the current draft/final stage files and workspace context
+6. `intake_context.json`, `artifact_index.json`, and, when available, `experiment_manifest.json`
+7. optional refinement feedback
+8. for continuation attempts, the current draft/final stage files and workspace context
 
 The assembled prompt is written to `runs/<run_id>/prompt_cache/`, per-stage session IDs are stored in `runs/<run_id>/operator_state/`, and Claude is invoked in live streaming mode.
 
@@ -432,29 +484,43 @@ The main code lives in:
 - [main.py](main.py)
 - [src/manager.py](src/manager.py)
 - [src/operator.py](src/operator.py)
+- [src/intake.py](src/intake.py)
+- [src/manifest.py](src/manifest.py)
+- [src/artifact_index.py](src/artifact_index.py)
+- [src/experiment_manifest.py](src/experiment_manifest.py)
 - [src/utils.py](src/utils.py)
 - [src/writing_manifest.py](src/writing_manifest.py)
+- [src/platform/foundry.py](src/platform/foundry.py)
 - [src/prompts/](src/prompts)
 
 ```mermaid
 flowchart LR
     A[main.py] --> B[src/manager.py]
     B --> C[src/operator.py]
-    B --> D[src/utils.py]
-    B --> E[src/writing_manifest.py]
-    B --> F[src/prompts/*]
-    C --> D
+    B --> D[src/intake.py]
+    B --> E[src/manifest.py]
+    B --> F[src/artifact_index.py]
+    B --> G[src/experiment_manifest.py]
+    B --> H[src/utils.py]
+    B --> I[src/writing_manifest.py]
+    B --> J[src/platform/foundry.py]
+    B --> K[src/prompts/*]
+    C --> H
 ```
 
 File boundaries:
 
-- [main.py](main.py): CLI entry point. Starts a new run or resumes an existing run.
-- [src/manager.py](src/manager.py): Owns the 8-stage loop, approval flow, repair flow, resume, redo-stage logic, and stage-level continuation policy.
-- [src/operator.py](src/operator.py): Invokes Claude CLI, streams output live, persists stage session IDs, resumes the same stage conversation for refinement, and falls back to a fresh session if resume fails.
-- [src/utils.py](src/utils.py): Stage metadata, prompt assembly, run paths, markdown validation, and artifact validation.
+- [main.py](main.py): CLI entry point. Starts a new run, resumes an existing run, collects resources, and exposes redo/rollback controls.
+- [src/manager.py](src/manager.py): Owns intake plus the 8-stage loop, approval flow, repair flow, resume/redo/rollback logic, and stage-level continuation policy.
+- [src/operator.py](src/operator.py): Invokes Claude CLI, streams output live, persists stage session state, resumes the same stage conversation for refinement, and falls back to a fresh session if resume fails.
+- [src/intake.py](src/intake.py): Resource ingestion, intake context persistence, and prompt formatting for preloaded materials.
+- [src/manifest.py](src/manifest.py): Lightweight run lifecycle state, stage status tracking, and rollback/stale invalidation.
+- [src/artifact_index.py](src/artifact_index.py): Run-wide artifact indexing over data, results, and figures.
+- [src/experiment_manifest.py](src/experiment_manifest.py): Standardized experiment bundle summary used by later stages.
+- [src/utils.py](src/utils.py): Stage metadata, prompt assembly, run paths, markdown validation, artifact validation, and handoff helpers.
 - [src/prompts/](src/prompts): Per-stage prompt templates.
 
-## 📂 Run Layout
+## 🗂️ Run State
 
 Each run contains `user_input.txt`, `memory.md`, `run_manifest.json`, `artifact_index.json`, `prompt_cache/`, `operator_state/`, `stages/`, `workspace/`, `logs.txt`, and `logs_raw.jsonl`. The substantive research payload lives in `workspace/`.
 
@@ -534,16 +600,20 @@ A run with only markdown notes does not pass validation.
 
 ### Included in the current mainline
 
+- optional intake stage and resource ingestion
 - fixed 8-stage workflow
 - mandatory human approval after every stage
-- one primary Claude invocation per stage attempt
+- Claude Code as the execution layer
 - stage-local continuation within the same Claude session
 - prompt caching via `@file`
 - live streaming terminal output
 - repair passes and local fallback normalization
-- draft-to-final stage promotion
+- run manifest, rollback, and stale tracking
+- artifact index and experiment manifest
+- stage handoff context
+- manuscript/release package generation after approval
 - artifact-aware validation
-- resume and `--redo-stage`
+- resume, `--redo-stage`, and `--rollback-stage`
 - lightweight venue profiles for Stage 07 writing
 
 ### Intentionally out of scope
@@ -558,29 +628,33 @@ A run with only markdown notes does not pass validation.
 
 The most valuable next steps are the ones that make AutoR more like a real research workflow, not more like a demo framework.
 
-- **Cross-stage rollback and invalidation**
-  Later-stage failures should be able to mark downstream work as stale.
-- **Machine-readable run manifest**
-  Add a lightweight source of truth for stage status, stale dependencies, and artifact pointers.
-- **Continuation handoff compression**
-  Make long stage refinement more stable without bloating context.
-- **Stronger automated tests**
-  Cover repair flow, resume fallback, artifact validation, and approval-loop correctness.
-- **Artifact indexing**
-  Add lightweight metadata around `data/`, `results/`, `figures/`, and `writing/`.
-- **Frontend run browser**
-  A lightweight UI for browsing runs, stages, logs, and artifacts, driven by the run directory itself.
+| Next step | Why it matters |
+| --- | --- |
+| **Deeper cross-stage rollback and invalidation** | Make downstream stale-state handling stronger and more explicit after earlier-stage changes. |
+| **Stronger machine-readable run state** | Extend the current run manifest into a better source of truth for stage status, stale dependencies, and artifact pointers. |
+| **Continuation handoff compression** | Make long stage refinement more stable without bloating context. |
+| **Stronger automated tests** | Cover repair flow, resume fallback, artifact validation, and approval-loop correctness more deeply. |
+| **Richer artifact indexing** | Extend metadata around `data/`, `results/`, `figures/`, and `writing/` without turning AutoR into a heavy platform. |
+| **Frontend run browser** | Add a lightweight UI for browsing runs, stages, logs, and artifacts directly from the run directory. |
+
+Implemented milestone:
 
 - ~~Stage-local continuation sessions.~~ Keep one Claude conversation per stage, reuse it for `1/2/3/4` refinement, and fall back to a fresh session only when resume fails. This is now implemented in the operator and manager flow.
 - ~~Artifact-level validation for non-toy outputs.~~ Enforce machine-readable data, result files, figures, LaTeX sources, PDF output, and review artifacts at the right stages. This is now part of the workflow validation path.
+
+<details>
+<summary><strong>Expanded roadmap notes</strong></summary>
+
 - Cross-stage rollback and invalidation. When a later stage reveals that an earlier design decision is wrong, the workflow should be able to jump back to an earlier stage and mark downstream stages as stale. This is the biggest current control-flow gap.
 - Machine-readable run manifest. Add a single source of truth such as `run_manifest.json` to track stage status, approval state, stale dependencies, session IDs, and key artifact pointers. This should make both automation and future UI work much cleaner.
 - Continuation handoff compression. Add a short machine-generated stage handoff file that summarizes what is already correct, what is missing, and which files matter most. This should reduce context growth and make continuation more stable over long runs.
 - ~~Result schema and artifact indexing.~~ Standardize `workspace/data/`, `workspace/results/`, and `workspace/figures/` around explicit schemas and generate an artifact index automatically. The workflow now writes `artifact_index.json`, carries basic inferred or declared schema metadata, and feeds the index into later-stage prompt context and the writing manifest.
-- Writing pipeline hardening. Turn Stage 07 into a reliable manuscript production pipeline with stable conference and journal-style paper structures, bibliography handling, table and figure inclusion, and reproducible PDF compilation. The goal is a submission-ready paper package, not just writing notes.
-- Review and dissemination package. Expand Stage 08 so it produces readiness checklists, threats-to-validity notes, artifact manifests, release notes, and external-facing research bundles. The final stage should feel like packaging a paper for real release, not just wrapping up text.
+- Writing pipeline hardening. Turn Stage 07 into a reliable manuscript production pipeline with stable conference and journal-style writing structures, bibliography handling, table and figure inclusion, and reproducible PDF compilation. The goal is a submission-grade research package, not just writing notes.
+- Review and dissemination package. Expand Stage 08 so it produces readiness checklists, threats-to-validity notes, artifact manifests, release notes, and external-facing research bundles. The final stage should feel like packaging a verifiable research release, not just wrapping up text.
 - Frontend run dashboard. Build a lightweight UI that can browse runs, stage status, summaries, logs, artifacts, and validation failures. It should read from the run directory and manifest rather than introducing a database first.
 - README and open-source assets. Keep refining the README and add `assets/` images such as workflow diagrams, UI screenshots, and artifact examples. This is important for open-source clarity, onboarding, and project presentation.
+
+</details>
 
 ## 🌍 Community
 

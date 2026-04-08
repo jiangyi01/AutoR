@@ -52,6 +52,8 @@ class RunPaths:
     artifacts_dir: Path
     notes_dir: Path
     reviews_dir: Path
+    bootstrap_dir: Path
+    profile_dir: Path
     intake_context: Path
 
     def stage_file(self, stage: StageSpec) -> Path:
@@ -70,7 +72,7 @@ class RunPaths:
         return self.operator_state_dir / f"{stage.slug}.attempt_{attempt_no:02d}.json"
 
     def stage_execution_marker_file(self, stage: StageSpec) -> Path:
-        return self.operator_state_dir / f"{stage.slug}.execution_started"
+        return self.operator_state_dir / f"{stage.slug}.started_at.txt"
 
 
 @dataclass(frozen=True)
@@ -179,6 +181,8 @@ def build_run_paths(run_root: Path) -> RunPaths:
         artifacts_dir=workspace_root / "artifacts",
         notes_dir=workspace_root / "notes",
         reviews_dir=workspace_root / "reviews",
+        bootstrap_dir=workspace_root / "bootstrap",
+        profile_dir=workspace_root / "profile",
         intake_context=run_root / "intake_context.json",
     )
 
@@ -210,6 +214,8 @@ def workspace_dirs(paths: RunPaths) -> list[Path]:
         paths.artifacts_dir,
         paths.notes_dir,
         paths.reviews_dir,
+        paths.bootstrap_dir,
+        paths.profile_dir,
     ]
 
 
@@ -364,6 +370,8 @@ def format_stage_template(template: str, stage: StageSpec, paths: RunPaths) -> s
         "{{WORKSPACE_ARTIFACTS_DIR}}": str(paths.artifacts_dir.resolve()),
         "{{WORKSPACE_NOTES_DIR}}": str(paths.notes_dir.resolve()),
         "{{WORKSPACE_REVIEWS_DIR}}": str(paths.reviews_dir.resolve()),
+        "{{WORKSPACE_BOOTSTRAP_DIR}}": str(paths.bootstrap_dir.resolve()),
+        "{{WORKSPACE_PROFILE_DIR}}": str(paths.profile_dir.resolve()),
         "{{SELECTED_VENUE}}": selected_venue_key(paths),
     }
 
@@ -400,8 +408,8 @@ def build_prompt(
     stage_template: str,
     user_request: str,
     approved_memory: str,
-    handoff_context: str,
-    revision_feedback: str | None,
+    handoff_context: str = "",
+    revision_feedback: str | None = None,
     intake_context_text: str | None = None,
 ) -> str:
     sections = [
@@ -839,24 +847,28 @@ def approved_stage_numbers(memory_text: str) -> set[int]:
 
 def filtered_approved_memory(memory_text: str, max_stage_number: int) -> str:
     user_goal = extract_markdown_section(memory_text, "Original User Goal") or ""
+    intake_summary = extract_markdown_section(memory_text, "Intake Resources and Clarifications")
     kept_entries = [
         entry
         for number, entry in approved_stage_entries(memory_text)
         if number <= max_stage_number
     ]
-    return build_memory_text(user_goal, kept_entries)
+    return build_memory_text(user_goal, kept_entries, intake_summary=intake_summary)
 
 
 def append_approved_stage_summary(memory_path: Path, stage: StageSpec, stage_markdown: str) -> None:
+    if stage.number < 0:
+        raise ValueError(f"Cannot append pseudo-stage {stage.slug} to approved memory.")
     current = read_text(memory_path)
     user_goal = extract_markdown_section(current, "Original User Goal") or ""
+    intake_summary = extract_markdown_section(current, "Intake Resources and Clarifications")
     retained_entries = [
         entry
         for number, entry in approved_stage_entries(current)
         if number < stage.number
     ]
     retained_entries.append(render_approved_stage_entry(stage, stage_markdown))
-    write_text(memory_path, build_memory_text(user_goal, retained_entries))
+    write_text(memory_path, build_memory_text(user_goal, retained_entries, intake_summary=intake_summary))
 
 
 def approved_stage_summaries(memory_text: str) -> str:
@@ -990,6 +1002,20 @@ def _has_recent_files_with_suffixes(directory: Path, suffixes: set[str], cutoff_
 
 def _count_non_markdown_files(directory: Path) -> int:
     return sum(1 for path in _existing_files(directory) if path.suffix.lower() not in {".md", ".txt"})
+
+
+def read_attempt_count(paths: RunPaths, stage: StageSpec) -> int:
+    path = paths.operator_state_dir / f"{stage.slug}.attempt_count.txt"
+    if path.exists():
+        text = read_text(path).strip()
+        if text.isdigit():
+            return int(text)
+    return 0
+
+
+def write_attempt_count(paths: RunPaths, stage: StageSpec, count: int) -> None:
+    path = paths.operator_state_dir / f"{stage.slug}.attempt_count.txt"
+    write_text(path, str(count))
 
 
 def _load_template_registry() -> dict[str, dict[str, str]]:
