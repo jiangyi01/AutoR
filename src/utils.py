@@ -843,24 +843,28 @@ def approved_stage_numbers(memory_text: str) -> set[int]:
 
 def filtered_approved_memory(memory_text: str, max_stage_number: int) -> str:
     user_goal = extract_markdown_section(memory_text, "Original User Goal") or ""
+    intake_summary = extract_markdown_section(memory_text, "Intake Resources and Clarifications")
     kept_entries = [
         entry
         for number, entry in approved_stage_entries(memory_text)
         if number <= max_stage_number
     ]
-    return build_memory_text(user_goal, kept_entries)
+    return build_memory_text(user_goal, kept_entries, intake_summary=intake_summary)
 
 
 def append_approved_stage_summary(memory_path: Path, stage: StageSpec, stage_markdown: str) -> None:
+    if stage.number < 0:
+        raise ValueError(f"Cannot append pseudo-stage {stage.slug} to approved memory.")
     current = read_text(memory_path)
     user_goal = extract_markdown_section(current, "Original User Goal") or ""
+    intake_summary = extract_markdown_section(current, "Intake Resources and Clarifications")
     retained_entries = [
         entry
         for number, entry in approved_stage_entries(current)
         if number < stage.number
     ]
     retained_entries.append(render_approved_stage_entry(stage, stage_markdown))
-    write_text(memory_path, build_memory_text(user_goal, retained_entries))
+    write_text(memory_path, build_memory_text(user_goal, retained_entries, intake_summary=intake_summary))
 
 
 def approved_stage_summaries(memory_text: str) -> str:

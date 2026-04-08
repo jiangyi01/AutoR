@@ -10,8 +10,12 @@ from .project_bootstrap import (
     format_project_context_for_prompt,
     format_project_scan_for_prompt,
     format_scan_stats_for_log,
+    load_recommended_entry_stage,
+    load_stage_assessments,
     project_bootstrap_exists,
+    recommend_entry_stage,
     save_project_bootstrap,
+    save_recommended_entry_stage,
     scan_project,
 )
 from .intake import (
@@ -44,12 +48,15 @@ from .platform.foundry import generate_paper_package, generate_release_package
 from .terminal_ui import TerminalUI
 from .writing_manifest import build_writing_manifest, format_manifest_for_prompt
 from .utils import (
+    DEFAULT_REFINEMENT_SUGGESTIONS,
+    FIXED_STAGE_OPTIONS,
     INTAKE_STAGE,
     STAGES,
     RunPaths,
     StageSpec,
     append_approved_stage_summary,
     approved_stage_numbers,
+    approved_stage_summaries,
     append_log_entry,
     build_handoff_context,
     build_continuation_prompt,
@@ -404,13 +411,13 @@ class ResearchManager:
 
         if project_bootstrap_exists(paths):
             self.ui.show_status("Project bootstrap already exists, skipping scan.", level="info")
-            from .project_bootstrap import load_recommended_entry_stage
             entry = load_recommended_entry_stage(paths)
             if entry is not None:
                 for s in STAGES:
                     if s.number == entry:
                         return s
-            return None
+            self.ui.show_status("Bootstrap entry stage metadata missing. Defaulting to Stage 01.", level="warn")
+            return STAGES[0]
 
         self.ui.show_status(f"Scanning project repo: {project_root}", level="info")
         try:
@@ -511,17 +518,20 @@ class ResearchManager:
                 continue
 
             if choice == "5":
-                # Append bootstrap summary to memory
-                bootstrap_context = format_project_context_for_prompt(paths)
-                if bootstrap_context:
-                    append_approved_stage_summary(paths.memory, stage, stage_markdown)
+                final_path = paths.stage_file(stage)
+                shutil.copyfile(result.stage_file_path, final_path)
+                append_log_entry(
+                    paths.logs,
+                    "project_bootstrap_promoted",
+                    f"Promoted project bootstrap summary.\ndraft: {result.stage_file_path}\nfinal: {final_path}",
+                )
+                corrected_assessments = load_stage_assessments(paths) or scan_result.stage_assessments
+                entry_stage_num = recommend_entry_stage(corrected_assessments)
+                save_recommended_entry_stage(paths, entry_stage_num)
+                self._adopt_project_bootstrap_baseline(paths, corrected_assessments, entry_stage_num)
                 append_log_entry(paths.logs, "project_bootstrap_approved", "Project bootstrap approved.")
                 self.ui.show_status("Approved project bootstrap.", level="success")
 
-                # Determine start stage from Claude's corrected assessments
-                from .project_bootstrap import load_recommended_entry_stage
-                entry = load_recommended_entry_stage(paths)
-                entry_stage_num = entry if entry is not None else scan_result.recommended_entry_stage
                 for s in STAGES:
                     if s.number == entry_stage_num:
                         self.ui.show_status(
@@ -533,6 +543,88 @@ class ResearchManager:
 
             if choice == "6":
                 return None
+
+    def _adopt_project_bootstrap_baseline(
+        self,
+        paths: RunPaths,
+        assessments,
+        entry_stage_num: int,
+    ) -> None:
+        if entry_stage_num <= 1:
+            return
+
+        artifact_paths = self._project_bootstrap_artifact_paths(paths)
+        assessments_by_number = {assessment.stage_number: assessment for assessment in assessments}
+
+        for stage in STAGES:
+            if stage.number >= entry_stage_num:
+                break
+            stage_markdown = self._bootstrap_stage_markdown(
+                paths,
+                stage,
+                assessments_by_number.get(stage.number),
+                artifact_paths,
+            )
+            write_text(paths.stage_file(stage), stage_markdown)
+            append_approved_stage_summary(paths.memory, stage, stage_markdown)
+            mark_stage_approved_manifest(paths, stage, 0, self._stage_file_paths(stage_markdown))
+            write_stage_handoff(paths, stage, stage_markdown)
+
+    def _project_bootstrap_artifact_paths(self, paths: RunPaths) -> list[str]:
+        artifact_paths: list[str] = []
+        for filename in ("bootstrap_summary.md", "stage_assessments.json", "scan_metadata.json"):
+            path = paths.bootstrap_dir / filename
+            if path.exists():
+                artifact_paths.append(str(path.relative_to(paths.run_root)).replace("\\", "/"))
+        return artifact_paths
+
+    def _bootstrap_stage_markdown(
+        self,
+        paths: RunPaths,
+        stage: StageSpec,
+        assessment,
+        artifact_paths: list[str],
+    ) -> str:
+        prior = approved_stage_summaries(read_text(paths.memory))
+        stage_file_path = str(paths.stage_file(stage).relative_to(paths.run_root)).replace("\\", "/")
+        files_produced = [f"- `{stage_file_path}`"] + [f"- `{path}`" for path in artifact_paths]
+        evidence_lines = ["- No specific bootstrap evidence recorded."]
+        status_line = "Bootstrap carry-forward status: unspecified."
+        if assessment is not None:
+            status_line = (
+                f"Bootstrap carry-forward status: {assessment.status} "
+                f"(confidence: {assessment.confidence})."
+            )
+            if assessment.evidence:
+                evidence_lines = [f"- {item}" for item in assessment.evidence]
+        suggestions = "\n".join(
+            f"{index}. {text}"
+            for index, text in enumerate(DEFAULT_REFINEMENT_SUGGESTIONS, start=1)
+        )
+        options = "\n".join(FIXED_STAGE_OPTIONS)
+        evidence_block = "\n".join(evidence_lines)
+        files_block = "\n".join(files_produced)
+
+        return (
+            f"# Stage {stage.number:02d}: {stage.display_name}\n\n"
+            "## Objective\n"
+            f"Carry forward the pre-existing project state for {stage.display_name} from the approved project bootstrap.\n\n"
+            "## Previously Approved Stage Summaries\n"
+            f"{prior}\n\n"
+            "## What I Did\n"
+            "- Reviewed the approved project bootstrap artifacts for this repository.\n"
+            "- Recorded the prior state of this stage instead of rerunning it from scratch.\n\n"
+            "## Key Results\n"
+            f"- {status_line}\n"
+            "- This stage is being accepted as prior project context before continuing downstream AutoR stages.\n"
+            f"{evidence_block}\n\n"
+            "## Files Produced\n"
+            f"{files_block}\n\n"
+            "## Suggestions for Refinement\n"
+            f"{suggestions}\n\n"
+            "## Your Options\n"
+            f"{options}\n"
+        )
 
     def _build_project_bootstrap_prompt(
         self,

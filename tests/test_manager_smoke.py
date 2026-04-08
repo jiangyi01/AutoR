@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from src.manager import ResearchManager
 from src.manifest import load_run_manifest
+from src.project_bootstrap import StageAssessment
 from src.utils import (
     DEFAULT_REFINEMENT_SUGGESTIONS,
     INTAKE_STAGE,
@@ -195,6 +196,27 @@ class ScriptedSmokeOperator:
         )
 
 
+class BootstrapAdjustingSmokeOperator(ScriptedSmokeOperator):
+    def __init__(self, corrected_assessments: list[StageAssessment]) -> None:
+        super().__init__()
+        self.corrected_assessments = corrected_assessments
+
+    def run_stage(
+        self,
+        stage,
+        prompt: str,
+        paths,
+        attempt_no: int,
+        continue_session: bool = False,
+    ) -> OperatorResult:
+        if stage.slug == "project_bootstrap":
+            write_text(
+                paths.bootstrap_dir / "stage_assessments.json",
+                json.dumps([assessment.__dict__ for assessment in self.corrected_assessments], indent=2),
+            )
+        return super().run_stage(stage, prompt, paths, attempt_no, continue_session=continue_session)
+
+
 class ManagerSmokeTests(unittest.TestCase):
     def _run_roots(self, runs_dir: Path) -> list[Path]:
         return sorted(path for path in runs_dir.iterdir() if path.is_dir())
@@ -302,6 +324,78 @@ class ManagerSmokeTests(unittest.TestCase):
             self.assertEqual(manifest.run_status, "cancelled")
             self.assertEqual(manifest.current_stage_slug, INTAKE_STAGE.slug)
             self.assertIsNone(manifest.completed_at)
+
+    def test_project_bootstrap_carries_forward_prior_stages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir, operator, manager = self._build_manager(tmp_dir)
+            project_root = Path(tmp_dir) / "existing_project"
+            project_root.mkdir()
+            for name in ["main.py", "model.py", "train.py", "data.py", "utils.py", "eval.py"]:
+                (project_root / name).write_text("# existing project code\n", encoding="utf-8")
+            (project_root / "requirements.txt").write_text("torch\n", encoding="utf-8")
+
+            with patch.object(manager, "_ask_choice", return_value="5"):
+                success = manager.run(
+                    "Adopt an existing project into AutoR.",
+                    venue="neurips_2025",
+                    project_root=project_root,
+                )
+
+            self.assertTrue(success)
+            run_root = self._run_roots(runs_dir)[0]
+            paths = build_run_paths(run_root)
+            manifest = load_run_manifest(paths.run_manifest)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+            for stage in STAGES[:4]:
+                entry = next(item for item in manifest.stages if item.slug == stage.slug)
+                self.assertTrue(entry.approved)
+                self.assertTrue(paths.stage_file(stage).exists())
+            self.assertNotIn(STAGE_01.slug, operator.invocations)
+            self.assertIn(STAGE_05.slug, operator.invocations)
+            memory_text = read_text(paths.memory)
+            self.assertIn("Stage 00: Research Intake", memory_text)
+            self.assertIn("Stage 01: Literature Survey", memory_text)
+            self.assertIn("Stage 04: Implementation", memory_text)
+            self.assertNotIn("Stage -1: Project Repo Bootstrap", memory_text)
+
+    def test_project_bootstrap_uses_corrected_stage_assessments_for_entry_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir = Path(tmp_dir) / "runs"
+            corrected = [
+                StageAssessment(1, "Literature Survey", "complete", "medium", ["bootstrap-approved"]),
+                StageAssessment(2, "Hypothesis Generation", "complete", "medium", ["bootstrap-approved"]),
+                StageAssessment(3, "Study Design", "not_started", "high", ["design gap remains"]),
+                StageAssessment(4, "Implementation", "complete", "high", ["implementation exists"]),
+                StageAssessment(5, "Experimentation", "not_started", "medium", ["no reliable experiment results"]),
+                StageAssessment(6, "Analysis", "not_started", "medium", ["no reliable analysis"]),
+                StageAssessment(7, "Writing", "not_started", "medium", ["no usable manuscript"]),
+                StageAssessment(8, "Dissemination", "not_started", "medium", ["no dissemination artifacts"]),
+            ]
+            operator = BootstrapAdjustingSmokeOperator(corrected)
+            manager = ResearchManager(
+                project_root=REPO_ROOT,
+                runs_dir=runs_dir,
+                operator=operator,
+                output_stream=io.StringIO(),
+            )
+            project_root = Path(tmp_dir) / "existing_project"
+            project_root.mkdir()
+            for name in ["main.py", "model.py", "train.py", "eval.py"]:
+                (project_root / name).write_text("# existing project code\n", encoding="utf-8")
+            (project_root / "requirements.txt").write_text("torch\n", encoding="utf-8")
+
+            with patch.object(manager, "_ask_choice", return_value="5"):
+                success = manager.run(
+                    "Adopt an existing project with a bootstrap correction.",
+                    venue="neurips_2025",
+                    project_root=project_root,
+                )
+
+            self.assertTrue(success)
+            self.assertIn(STAGES[2].slug, operator.invocations)
+            self.assertNotIn(STAGE_01.slug, operator.invocations)
+            self.assertNotIn(STAGES[1].slug, operator.invocations)
 
 
 if __name__ == "__main__":
