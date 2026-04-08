@@ -230,6 +230,9 @@ AI handles execution load; humans steer the research when direction actually mat
 - Python 3.10+
 - Claude CLI available on `PATH` for real runs
 - Local TeX tools are helpful for Stage 07, but not required for smoke tests
+- For `--research-diagram` (Gemini-generated method illustration inserted into the LaTeX paper):
+  - `pip install google-genai` (the `google.genai` SDK is **not** a default dependency; if it is missing the diagram step prints `Diagram generation failed: No module named 'google'` and the rest of the run continues unaffected)
+  - A Gemini API key exposed via `GOOGLE_API_KEY` or `GEMINI_API_KEY`, or a local `configs/diagram_config.yaml` (see `configs/diagram_config.template.yaml`)
 
 ### Common Commands
 

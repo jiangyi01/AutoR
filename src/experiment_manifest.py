@@ -51,6 +51,7 @@ class ExperimentManifest:
             summary={
                 str(key): int(value)
                 for key, value in dict(payload.get("summary", {})).items()
+                if isinstance(value, (int, float)) or (isinstance(value, str) and value.strip().lstrip("-").isdigit())
             },
         )
 

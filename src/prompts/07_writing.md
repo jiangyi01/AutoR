@@ -195,6 +195,16 @@ Additional expectations for this stage:
 - `Files Produced` should list the actual LaTeX, bibliography, PDF, and structured build artifacts.
 - `Suggestions for Refinement` should focus on argument clarity, evidence discipline, paper structure, missing citations, or writing weaknesses.
 
+## Method Illustration Diagram
+
+If the `--research-diagram` flag is active (the workflow manager will handle generation externally after this stage), write the `method.tex` section so that an illustration figure can be cleanly inserted at the top. Specifically:
+
+- Write a clear, self-contained method section that describes the approach step by step.
+- Use `\label{sec:method}` on the method section heading.
+- Leave a comment `% METHOD_DIAGRAM_PLACEHOLDER` after the section heading if you want the diagram auto-inserted at a specific position.
+- The diagram will be generated from the method text and injected automatically — you do not need to create the figure yourself.
+- If a diagram file already exists at `{{WORKSPACE_FIGURES_DIR}}/method_overview.jpg`, reference it with `\includegraphics` in a `figure*` environment.
+
 ## Important Constraints
 
 - Do not invent missing evidence in order to strengthen the story.
