@@ -18,7 +18,9 @@ from src.project_bootstrap import (
     load_recommended_entry_stage,
     load_stage_assessments,
     project_bootstrap_exists,
+    recommend_entry_stage,
     save_project_bootstrap,
+    save_recommended_entry_stage,
     scan_project,
 )
 from src.utils import build_run_paths, ensure_run_layout
@@ -148,6 +150,26 @@ class StageAssessmentTests(unittest.TestCase):
             self.assertEqual(s04.status, "complete")
             self.assertGreaterEqual(result.recommended_entry_stage, 5)
 
+    def test_high_confidence_earlier_gap_pulls_entry_back(self) -> None:
+        assessments = [
+            StageAssessment(1, "Literature Survey", "complete", "medium", ["approved"]),
+            StageAssessment(2, "Hypothesis Generation", "complete", "medium", ["approved"]),
+            StageAssessment(3, "Study Design", "not_started", "high", ["missing study design evidence"]),
+            StageAssessment(4, "Implementation", "complete", "high", ["implementation exists"]),
+            StageAssessment(5, "Experimentation", "not_started", "medium", ["no results"]),
+        ]
+        self.assertEqual(recommend_entry_stage(assessments), 3)
+
+    def test_low_confidence_earlier_gap_does_not_block_downstream_entry(self) -> None:
+        assessments = [
+            StageAssessment(1, "Literature Survey", "not_started", "low", ["no bibliography in repo"]),
+            StageAssessment(2, "Hypothesis Generation", "complete", "low", ["inferred from downstream work"]),
+            StageAssessment(3, "Study Design", "partial", "low", ["no explicit config files"]),
+            StageAssessment(4, "Implementation", "complete", "high", ["code exists"]),
+            StageAssessment(5, "Experimentation", "not_started", "medium", ["no experiment results"]),
+        ]
+        self.assertEqual(recommend_entry_stage(assessments), 5)
+
 
 # ---------------------------------------------------------------------------
 # Save / load
@@ -218,6 +240,13 @@ class SaveLoadTests(unittest.TestCase):
             self.assertIsNone(load_project_bootstrap_summary(paths))
             self.assertIsNone(load_stage_assessments(paths))
             self.assertIsNone(load_recommended_entry_stage(paths))
+
+    def test_save_recommended_entry_stage_updates_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _make_run(Path(tmp))
+            save_project_bootstrap(paths, self._sample_result())
+            save_recommended_entry_stage(paths, 3)
+            self.assertEqual(load_recommended_entry_stage(paths), 3)
 
 
 # ---------------------------------------------------------------------------

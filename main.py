@@ -74,10 +74,22 @@ def parse_args() -> argparse.Namespace:
         help="When resuming a run, roll back to this stage and mark downstream stages stale before continuing.",
     )
     parser.add_argument(
+        "--project-root",
+        metavar="PATH",
+        help="Path to an existing project repository. AutoR will scan it to infer "
+             "current project state and recommend a re-entry stage.",
+    )
+    parser.add_argument(
         "--paper-corpus",
         metavar="PATH",
         help="Path to a directory of the user's own prior papers (PDFs, LaTeX, BibTeX, notes). "
              "AutoR will analyze them to build a researcher profile that seeds downstream stages.",
+    )
+    parser.add_argument(
+        "--stage-timeout",
+        type=int,
+        default=14400,
+        help="Maximum seconds per stage attempt before timeout. Defaults to 14400 (4 hours).",
     )
     return parser.parse_args()
 
@@ -170,7 +182,7 @@ def main() -> int:
         existing_model = existing_config.get("model")
         model = args.model or (existing_model if existing_model != "unknown" else None) or "sonnet"
         venue = resolve_venue_key(args.venue or existing_config["venue"])
-        operator = ClaudeOperator(model=model, fake_mode=args.fake_operator, ui=ui)
+        operator = ClaudeOperator(model=model, fake_mode=args.fake_operator, ui=ui, stage_timeout=args.stage_timeout)
         manager = ResearchManager(
             project_root=repo_root,
             runs_dir=runs_dir,
@@ -186,7 +198,7 @@ def main() -> int:
 
     model = args.model or "sonnet"
     venue = resolve_venue_key(args.venue or DEFAULT_VENUE)
-    operator = ClaudeOperator(model=model, fake_mode=args.fake_operator, ui=ui)
+    operator = ClaudeOperator(model=model, fake_mode=args.fake_operator, ui=ui, stage_timeout=args.stage_timeout)
     manager = ResearchManager(
         project_root=repo_root,
         runs_dir=runs_dir,
@@ -204,6 +216,7 @@ def main() -> int:
     if not skip_intake and sys.stdin.isatty():
         resources = collect_resource_paths_from_ui(ui, initial_resources=args.resources)
 
+    project_root_arg = Path(args.project_root).expanduser().resolve() if args.project_root else None
     paper_corpus = Path(args.paper_corpus).expanduser().resolve() if args.paper_corpus else None
 
     return 0 if manager.run(
@@ -211,6 +224,7 @@ def main() -> int:
         venue=venue,
         resources=resources or None,
         skip_intake=skip_intake,
+        project_root=project_root_arg,
         paper_corpus=paper_corpus,
     ) else 1
 

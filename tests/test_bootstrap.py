@@ -22,6 +22,7 @@ from src.bootstrap import (
     load_corpus_manifest,
     load_research_profile,
     load_style_profile,
+    missing_bootstrap_profile_artifacts,
     parse_bibtex,
     save_bootstrap_result,
     scan_corpus,
@@ -339,6 +340,15 @@ class SaveLoadProfileTests(unittest.TestCase):
             self.assertFalse(bootstrap_profile_exists(paths))
             save_bootstrap_result(paths, self._sample_result())
             self.assertTrue(bootstrap_profile_exists(paths))
+
+    def test_bootstrap_profile_exists_requires_all_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _make_run(Path(tmp))
+            write_text = (paths.profile_dir / "bootstrap_summary.md").write_text
+            write_text("# Partial bootstrap\n", encoding="utf-8")
+            self.assertFalse(bootstrap_profile_exists(paths))
+            missing = missing_bootstrap_profile_artifacts(paths)
+            self.assertIn("workspace/profile/research_profile.json", missing)
 
     def test_load_missing_returns_none(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

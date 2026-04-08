@@ -15,6 +15,14 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 _CORPUS_SUFFIXES = {".pdf", ".tex", ".bib", ".bibtex", ".md", ".txt"}
+_REQUIRED_PROFILE_FILENAMES = (
+    "research_profile.json",
+    "citation_neighborhood.json",
+    "style_profile.json",
+    "style_notes.md",
+    "bootstrap_summary.md",
+    "corpus_manifest.json",
+)
 
 _MAX_CHARS_PER_FILE = 8000
 _MAX_FILES = 50
@@ -537,7 +545,16 @@ def load_corpus_manifest(paths: RunPaths) -> CorpusManifest | None:
 
 
 def bootstrap_profile_exists(paths: RunPaths) -> bool:
-    return (paths.profile_dir / "bootstrap_summary.md").exists()
+    return not missing_bootstrap_profile_artifacts(paths)
+
+
+def missing_bootstrap_profile_artifacts(paths: RunPaths) -> list[str]:
+    missing: list[str] = []
+    for filename in _REQUIRED_PROFILE_FILENAMES:
+        path = paths.profile_dir / filename
+        if not path.exists():
+            missing.append(str(path.relative_to(paths.run_root)).replace("\\", "/"))
+    return missing
 
 
 # ---------------------------------------------------------------------------
