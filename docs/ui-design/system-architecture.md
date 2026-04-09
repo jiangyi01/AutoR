@@ -61,6 +61,22 @@ That matches the current repository well because the real state already lives in
 
 The first version should stay local-first. AutoR is file-heavy and already optimized around local runs.
 
+## Implemented Foundation In This Branch
+
+The repository now includes a first backend foundation module:
+
+- `src/studio_service.py`
+
+It does not expose HTTP yet. Instead it stabilizes the backend semantics that the future API layer should wrap:
+
+- project metadata storage under a local app metadata root
+- run summary loading from manifests and configs
+- stage document access
+- workspace file tree generation
+- iteration planning for `continue`, `redo`, and `branch`
+
+This keeps the first implementation dependency-light while establishing the state model required by the UI.
+
 ## 4. System Boundaries
 
 ```mermaid

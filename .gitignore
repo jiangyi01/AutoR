@@ -5,6 +5,7 @@ runs/
 .tmp/
 AGENTS.md
 .codex
+.autor/
 configs/diagram_config.yaml
 docs/*
 !docs/ui-design/

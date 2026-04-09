@@ -225,6 +225,23 @@ This combines:
 - [Prototype Prompts](./prototype-prompts.md)
 - [Reference Audit](./references.md)
 
+## Implementation Status
+
+The first backend-oriented slice is now implemented in the repository:
+
+- `src/studio_service.py`
+- `tests/test_studio_service.py`
+
+This initial slice focuses on the state model required by the generated Project Hub and Run Workspace concepts:
+
+- project index storage
+- run summary loading
+- stage document loading
+- workspace file tree browsing
+- iteration planning for continue, redo, and branch
+
+The next logical step is to wrap this backend core with an HTTP service layer and then build the first UI shell on top of it.
+
 ## Suggested Build Order
 
 1. Project Hub

@@ -29,6 +29,23 @@ That means:
 
 Make the current Python workflow readable and controllable from a web UI.
 
+### Current branch status
+
+Partially implemented.
+
+Delivered now:
+
+- `src/studio_service.py`
+- `tests/test_studio_service.py`
+
+Covered in the current implementation:
+
+- project index storage
+- run summary loading
+- stage document access
+- workspace file tree construction
+- iteration planning for continue, redo, and branch
+
 ### Backend work
 
 - create FastAPI app
