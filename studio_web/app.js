@@ -1,4 +1,4 @@
-const PAGE_IDS = ["overview", "review", "files", "paper"];
+const PAGE_IDS = ["overview", "review", "files", "paper", "history"];
 
 const state = {
   page: readHashPage(),
@@ -8,12 +8,14 @@ const state = {
   selectedRunId: null,
   selectedStageSlug: null,
   selectedFilePath: null,
+  selectedVersionId: null,
   runSummary: null,
   artifactIndex: null,
   fileTree: null,
   stageDocument: "",
   filePreview: null,
   paperPreview: null,
+  history: null,
   iterationPlan: null,
 };
 
@@ -27,7 +29,6 @@ const elements = {
   projectForm: document.getElementById("project-form"),
   projectTitle: document.getElementById("project-title"),
   projectThesis: document.getElementById("project-thesis"),
-  projectMode: document.getElementById("project-mode"),
   projectsList: document.getElementById("projects-list"),
   runsList: document.getElementById("runs-list"),
   attachRunButton: document.getElementById("attach-run-button"),
@@ -68,6 +69,15 @@ const elements = {
   paperSections: document.getElementById("paper-sections"),
   paperTexPreview: document.getElementById("paper-tex-preview"),
   paperBuildLog: document.getElementById("paper-build-log"),
+  versionCount: document.getElementById("version-count"),
+  versionList: document.getElementById("version-list"),
+  historyTitle: document.getElementById("history-title"),
+  historyMeta: document.getElementById("history-meta"),
+  historySummary: document.getElementById("history-summary"),
+  historyArtifacts: document.getElementById("history-artifacts"),
+  historyStagePreview: document.getElementById("history-stage-preview"),
+  traceCount: document.getElementById("trace-count"),
+  traceTimeline: document.getElementById("trace-timeline"),
 };
 
 elements.reloadButton.addEventListener("click", () => {
@@ -144,7 +154,6 @@ async function createProject() {
   const payload = {
     title: elements.projectTitle.value.trim(),
     thesis: elements.projectThesis.value.trim(),
-    default_mode: elements.projectMode.value,
   };
   if (!payload.title || !payload.thesis) {
     return;
@@ -152,7 +161,6 @@ async function createProject() {
   const created = await api("/api/projects", { method: "POST", body: payload });
   state.selectedProjectId = created.project_id;
   elements.projectForm.reset();
-  elements.projectMode.value = "human";
   await bootstrap();
 }
 
@@ -175,18 +183,22 @@ async function loadRun(runId) {
     state.selectedFilePath = null;
     state.filePreview = null;
     state.iterationPlan = null;
+    state.selectedVersionId = null;
   }
 
-  const [summary, artifacts, fileTree, paperPreview] = await Promise.all([
+  const [summary, artifacts, fileTree, paperPreview, history] = await Promise.all([
     api(`/api/runs/${runId}`),
     api(`/api/runs/${runId}/artifacts`),
     api(`/api/runs/${runId}/files/tree?root=workspace&depth=4`),
     api(`/api/runs/${runId}/paper`),
+    api(`/api/runs/${runId}/history`),
   ]);
   state.runSummary = summary;
   state.artifactIndex = artifacts;
   state.fileTree = fileTree;
   state.paperPreview = paperPreview;
+  state.history = history;
+  state.selectedVersionId = state.selectedVersionId || history.current_version_id || history.versions.at(-1)?.version_id || null;
 
   const matchingProject = state.projects.find(
     (project) => project.project_id === state.selectedProjectId || project.run_ids.includes(runId)
@@ -208,6 +220,7 @@ async function loadRun(runId) {
   renderStages();
   renderFileTree();
   renderPaperPreview();
+  renderHistory();
   renderIterationForm();
 
   if (state.selectedStageSlug) {
@@ -226,6 +239,7 @@ async function loadStageDocument(stageSlug) {
   state.stageDocument = payload.markdown || "";
   renderStages();
   renderStagePanels();
+  renderHistory();
   renderIterationForm();
 }
 
@@ -283,7 +297,7 @@ function renderProjects() {
     card.innerHTML = `
       <div class="project-card-header">
         <span class="project-card-title">${escapeHtml(project.title)}</span>
-        <span class="mode-chip">${escapeHtml(project.default_mode)}</span>
+        <span class="mode-chip">human-in-loop</span>
       </div>
       <div class="project-card-thesis">${escapeHtml(project.thesis)}</div>
       <div class="run-card-meta">active run: ${escapeHtml(project.active_run_id || "none")}</div>
@@ -331,10 +345,11 @@ function renderProjectBrief() {
     renderEmpty(elements.projectBrief, "Project context appears here after you select a project.");
     return;
   }
-  elements.projectMeta.textContent = `${project.default_mode} mode · ${project.run_ids.length} run(s)`;
+  elements.projectMeta.textContent = `human-in-loop · ${project.run_ids.length} run(s)`;
   elements.projectBrief.classList.remove("empty-state");
   elements.projectBrief.innerHTML = `
     <p><strong>Thesis.</strong> ${escapeHtml(project.thesis)}</p>
+    <p><strong>Collaboration.</strong> Human review remains in the loop for every project and every run.</p>
     <p><strong>Active run.</strong> ${escapeHtml(project.active_run_id || "None attached yet.")}</p>
     <p><strong>Latest checkpoint.</strong> ${escapeHtml(project.latest_completed_stage_slug || "No approved stages yet.")}</p>
   `;
@@ -591,6 +606,98 @@ function renderPaperPreview() {
   }
 }
 
+function renderHistory() {
+  const history = state.history;
+  elements.versionList.innerHTML = "";
+  elements.historyArtifacts.innerHTML = "";
+  elements.traceTimeline.innerHTML = "";
+
+  if (!history) {
+    elements.versionCount.textContent = "0";
+    elements.traceCount.textContent = "0 events";
+    elements.historyTitle.textContent = "Version detail";
+    elements.historyMeta.textContent = "";
+    renderEmpty(elements.historySummary, "Select a checkpoint to inspect its stage summary and changed artifacts.");
+    renderEmpty(elements.historyStagePreview, "Select a checkpoint to preview its associated stage summary.");
+    return;
+  }
+
+  elements.versionCount.textContent = String(history.versions.length);
+  elements.traceCount.textContent = `${history.trace_events.length} events`;
+
+  for (const version of history.versions) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `version-card${version.version_id === state.selectedVersionId ? " is-active" : ""}`;
+    item.innerHTML = `
+      <div class="version-card-header">
+        <span class="version-card-title">${escapeHtml(version.label)}</span>
+        <span class="pill">${escapeHtml(version.kind.replaceAll("_", " "))}</span>
+      </div>
+      <div class="run-card-meta">${escapeHtml(version.created_at)}</div>
+      <div class="run-card-meta">${escapeHtml(version.stage_title || "Run-wide checkpoint")}</div>
+    `;
+    item.addEventListener("click", () => {
+      state.selectedVersionId = version.version_id;
+      renderHistory();
+      if (version.stage_slug) {
+        void safeAction(loadStageDocument(version.stage_slug));
+      }
+    });
+    elements.versionList.appendChild(item);
+  }
+
+  const selectedVersion = getSelectedVersion();
+  if (!selectedVersion) {
+    renderEmpty(elements.historySummary, "Select a checkpoint to inspect its stage summary and changed artifacts.");
+    renderEmpty(elements.historyStagePreview, "Select a checkpoint to preview its associated stage summary.");
+  } else {
+    elements.historyTitle.textContent = selectedVersion.label;
+    elements.historyMeta.textContent = `${selectedVersion.kind.replaceAll("_", " ")} · ${selectedVersion.created_at}`;
+    elements.historySummary.classList.remove("empty-state");
+    elements.historySummary.innerHTML = `
+      <p><strong>Checkpoint type.</strong> ${escapeHtml(selectedVersion.kind.replaceAll("_", " "))}</p>
+      <p><strong>Stage.</strong> ${escapeHtml(selectedVersion.stage_title || "Run-wide checkpoint")}</p>
+      <p><strong>Notes.</strong> ${escapeHtml(selectedVersion.notes)}</p>
+      <p><strong>Session.</strong> ${escapeHtml(selectedVersion.session_id || "not recorded")}</p>
+    `;
+
+    if (selectedVersion.artifact_paths.length) {
+      elements.historyArtifacts.innerHTML = selectedVersion.artifact_paths
+        .slice(0, 12)
+        .map((path) => `<li>${escapeHtml(path)}</li>`)
+        .join("");
+    } else {
+      elements.historyArtifacts.innerHTML = "<li>No artifacts recorded for this checkpoint.</li>";
+    }
+
+    const selectedStage = state.runSummary?.stages.find((stage) => stage.slug === selectedVersion.stage_slug) || null;
+    if (selectedStage && selectedVersion.stage_slug === state.selectedStageSlug && state.stageDocument) {
+      renderMarkdown(elements.historyStagePreview, markdownExcerpt(state.stageDocument, 28));
+    } else if (selectedVersion.stage_slug) {
+      renderEmpty(elements.historyStagePreview, "Open this checkpoint to preview its stage summary here.");
+    } else {
+      renderEmpty(elements.historyStagePreview, "This checkpoint is run-wide and has no single stage summary attached.");
+    }
+  }
+
+  for (const event of history.trace_events) {
+    const item = document.createElement("div");
+    item.className = `trace-item status-${event.status}`;
+    item.innerHTML = `
+      <div class="trace-time">${escapeHtml(event.timestamp)}</div>
+      <div class="trace-card">
+        <div class="trace-title-row">
+          <span class="trace-title">${escapeHtml(event.title)}</span>
+          <span class="pill">${escapeHtml(event.actor)}</span>
+        </div>
+        <div class="run-card-meta">${escapeHtml(event.detail)}</div>
+      </div>
+    `;
+    elements.traceTimeline.appendChild(item);
+  }
+}
+
 function renderWorkspaceSkeleton(message) {
   renderHeader();
   renderProjectBrief();
@@ -600,10 +707,17 @@ function renderWorkspaceSkeleton(message) {
   renderEmpty(elements.paperFrameContainer, "Select a run with writing artifacts to preview the paper.");
   renderEmpty(elements.paperTexPreview, "No manuscript source found.");
   renderEmpty(elements.paperBuildLog, "No build log found.");
+  renderEmpty(elements.historySummary, "Select a checkpoint to inspect its stage summary and changed artifacts.");
+  renderEmpty(elements.historyStagePreview, "Select a checkpoint to preview its associated stage summary.");
+  elements.versionCount.textContent = "0";
+  elements.traceCount.textContent = "0 events";
   elements.runSummary.innerHTML = "";
   elements.artifactSummary.innerHTML = "";
   elements.stageRail.innerHTML = "";
   elements.fileTree.innerHTML = "";
+  elements.versionList.innerHTML = "";
+  elements.historyArtifacts.innerHTML = "";
+  elements.traceTimeline.innerHTML = "";
   renderIterationPlaceholder("No iteration brief generated yet.");
 }
 
@@ -611,12 +725,14 @@ function clearRunState() {
   state.selectedRunId = null;
   state.selectedStageSlug = null;
   state.selectedFilePath = null;
+  state.selectedVersionId = null;
   state.runSummary = null;
   state.artifactIndex = null;
   state.fileTree = null;
   state.stageDocument = "";
   state.filePreview = null;
   state.paperPreview = null;
+  state.history = null;
   state.iterationPlan = null;
 }
 
@@ -820,6 +936,10 @@ function getSelectedProject() {
 
 function getSelectedStage() {
   return state.runSummary?.stages.find((stage) => stage.slug === state.selectedStageSlug) || null;
+}
+
+function getSelectedVersion() {
+  return state.history?.versions.find((version) => version.version_id === state.selectedVersionId) || null;
 }
 
 function readHashPage() {

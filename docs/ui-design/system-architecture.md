@@ -74,6 +74,7 @@ The current implementation now includes a lightweight local HTTP layer on top of
 The foundation currently stabilizes:
 
 - project metadata storage under a local app metadata root
+- human-in-the-loop project grouping with no project-level AutoR mode split
 - project summaries for dashboard-style project cards
 - run summary loading from manifests and configs
 - stage document access
@@ -81,8 +82,10 @@ The foundation currently stabilizes:
 - read-only file content access for preview panes
 - iteration planning for `continue`, `redo`, and `branch` with generated operator briefs
 - manuscript preview metadata and direct PDF streaming
+- derived version history from run manifests and approved stages
+- normalized execution trace events from `logs.txt`
 - local JSON endpoints over the backend core
-- a split local shell for Overview, Human Review, Files, and Paper
+- a split local shell for Overview, Human Review, Files, Paper, and Versions
 
 This keeps the implementation dependency-light while establishing the state model and transport surface required by the UI.
 
@@ -114,6 +117,7 @@ http://127.0.0.1:8765/studio/
 - `POST /api/projects/{project_id}/runs`
 - `GET /api/runs`
 - `GET /api/runs/{run_id}`
+- `GET /api/runs/{run_id}/history`
 - `GET /api/runs/{run_id}/paper`
 - `GET /api/runs/{run_id}/paper/pdf`
 - `GET /api/runs/{run_id}/stages/{stage_slug}`
@@ -150,7 +154,7 @@ graph TD
 Responsibilities:
 
 - group runs into user-facing projects
-- store project title, thesis, tags, and default mode
+- store project title, thesis, tags, and a fixed human-in-the-loop participation model
 - identify latest active run per project
 
 Suggested storage:
@@ -187,6 +191,11 @@ Responsibilities:
 - tail `logs_raw.jsonl`
 - tail `logs.txt`
 - emit normalized UI events
+
+Current branch note:
+
+- the studio already exposes a first read-only execution timeline based on normalized `logs.txt` headings
+- true live streaming is still planned, not yet implemented
 
 ### Writing Build Service
 

@@ -85,6 +85,11 @@ def build_handler(service: StudioService, static_root: Path):
                 self._write_json(HTTPStatus.OK, studio_to_dict(summary))
                 return
 
+            if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "history":
+                payload = studio_to_dict(service.get_run_history(parts[2]))
+                self._write_json(HTTPStatus.OK, payload)
+                return
+
             if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "paper":
                 preview = service.get_paper_preview(parts[2])
                 self._write_json(HTTPStatus.OK, studio_to_dict(preview))
@@ -138,7 +143,8 @@ def build_handler(service: StudioService, static_root: Path):
                 project = service.create_project(
                     title=str(payload.get("title") or "").strip(),
                     thesis=str(payload.get("thesis") or "").strip(),
-                    default_mode=str(payload.get("default_mode") or "human").strip().lower() or "human",
+                    participation_model="human_in_loop",
+                    default_mode=str(payload.get("default_mode") or "").strip().lower() or None,
                     tags=[
                         str(item).strip()
                         for item in payload.get("tags", [])

@@ -45,7 +45,6 @@ class StudioServiceTest(unittest.TestCase):
         project = self.service.create_project(
             title="Sparse MoE Study",
             thesis="Compare routing and training stability choices.",
-            default_mode="human",
             tags=["moe", "routing"],
         )
 
@@ -53,6 +52,7 @@ class StudioServiceTest(unittest.TestCase):
         projects = self.service.list_projects()
 
         self.assertEqual(project.project_id, "sparse-moe-study")
+        self.assertEqual(project.participation_model, "human_in_loop")
         self.assertEqual(attached.active_run_id, self.review_run_id)
         self.assertEqual(projects[0].run_ids, [self.review_run_id])
         self.assertEqual(projects[0].tags, ["moe", "routing"])
@@ -70,6 +70,15 @@ class StudioServiceTest(unittest.TestCase):
         self.assertEqual(summary.active_run_id, self.review_run_id)
         self.assertEqual(summary.latest_run_status, "human_review")
         self.assertEqual(summary.latest_completed_stage_slug, STAGE_04.slug)
+
+    def test_get_run_history_exposes_versions_and_trace(self) -> None:
+        history = self.service.get_run_history(self.review_run_id)
+
+        self.assertEqual(history.run_id, self.review_run_id)
+        self.assertTrue(any(version.kind == "auto_checkpoint" for version in history.versions))
+        self.assertTrue(any(version.kind == "awaiting_review" for version in history.versions))
+        self.assertTrue(any(event.title == "Run Started" for event in history.trace_events))
+        self.assertTrue(any(event.title == "Approved" and event.actor == "human" for event in history.trace_events))
 
     def test_get_run_summary_reads_manifest_and_artifacts(self) -> None:
         summary = self.service.get_run_summary(self.review_run_id)
@@ -169,6 +178,17 @@ class StudioServiceTest(unittest.TestCase):
         write_text(paths.writing_dir / "main.tex", "\\documentclass{article}\n\\begin{document}\nTest\n\\end{document}\n")
         write_text(paths.run_root / ".hidden.txt", "outside workspace")
         write_text(paths.workspace_root / ".hidden.txt", "hidden workspace file")
+        write_text(
+            paths.logs,
+            (
+                "=== 2026-04-09T10:10:10 | run_start ===\n"
+                "Run root\n\n"
+                "=== 2026-04-09T10:10:11 | 01_literature_survey approved ===\n"
+                "Approved\n\n"
+                "=== 2026-04-09T10:10:12 | 05_experimentation attempt 2 result ===\n"
+                "Result ready\n"
+            ),
+        )
         write_artifact_index(paths)
 
         for stage in (STAGE_01, STAGE_02, STAGE_03, STAGE_04):
@@ -189,6 +209,15 @@ class StudioServiceTest(unittest.TestCase):
 
         write_text(paths.writing_dir / "main.tex", "\\documentclass{article}\n\\begin{document}\n\\input{sections/method}\n\\end{document}\n")
         write_text(paths.writing_dir / "build.log", "latexmk -pdf main.tex\nOutput written on main.pdf\n")
+        write_text(
+            paths.logs,
+            (
+                "=== 2026-04-09T20:20:20 | run_start ===\n"
+                "Run root\n\n"
+                "=== 2026-04-09T20:22:20 | 07_writing approved ===\n"
+                "Writing approved\n"
+            ),
+        )
         sections_dir = paths.writing_dir / "sections"
         sections_dir.mkdir(parents=True, exist_ok=True)
         write_text(sections_dir / "method.tex", "\\section{Method}\nThe operator loop.\n")

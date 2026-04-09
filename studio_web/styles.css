@@ -199,6 +199,10 @@ body {
   grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
 }
 
+.history-grid {
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) minmax(300px, 360px);
+}
+
 .files-grid {
   grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
 }
@@ -206,7 +210,9 @@ body {
 .runs-list,
 .projects-list,
 .stage-rail,
-.file-tree {
+.file-tree,
+.version-list,
+.trace-timeline {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -242,7 +248,8 @@ body {
 
 .run-card,
 .project-card,
-.stage-item {
+.stage-item,
+.version-card {
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 12px 14px;
@@ -252,36 +259,49 @@ body {
 .run-card,
 .project-card,
 .stage-item,
+.version-card,
 .tree-label {
   transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, color 120ms ease;
 }
 
 .run-card,
 .project-card,
-.stage-item {
+.stage-item,
+.version-card {
   cursor: pointer;
 }
 
 .run-card:hover,
 .project-card:hover,
-.stage-item:hover {
+.stage-item:hover,
+.version-card:hover {
   border-color: rgba(31, 122, 106, 0.45);
 }
 
 .run-card.is-active,
 .project-card.is-active,
-.stage-item.is-active {
+.stage-item.is-active,
+.version-card.is-active {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(31, 122, 106, 0.12);
 }
 
 .project-card-header,
 .run-card-title,
-.stage-title {
+.stage-title,
+.version-card-title {
   font-weight: 700;
 }
 
 .project-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.version-card-header,
+.trace-title-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -580,6 +600,44 @@ textarea {
   color: var(--muted);
 }
 
+.trace-item {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.trace-time {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding-top: 12px;
+}
+
+.trace-card {
+  border-left: 3px solid var(--line);
+  border-radius: 14px;
+  background: var(--card-strong);
+  box-shadow: var(--shadow-soft);
+  padding: 12px 14px;
+}
+
+.trace-item.status-success .trace-card {
+  border-left-color: var(--accent);
+}
+
+.trace-item.status-warning .trace-card {
+  border-left-color: var(--warning);
+}
+
+.trace-item.status-neutral .trace-card {
+  border-left-color: #8a95a1;
+}
+
+.trace-title {
+  font-weight: 700;
+}
+
 .paper-frame-container {
   min-height: 72vh;
   border: 1px solid rgba(216, 224, 231, 0.9);
@@ -603,7 +661,8 @@ textarea {
   .overview-grid,
   .review-grid,
   .files-grid,
-  .paper-grid {
+  .paper-grid,
+  .history-grid {
     grid-template-columns: 1fr;
   }
 

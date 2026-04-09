@@ -49,7 +49,7 @@ That change matters because AutoR already stores durable state on disk. The UI s
 This first design pass covers the features you requested:
 
 - multiple research project management
-- `Human` and `AutoR` interaction modes
+- human-in-the-loop execution with explicit review checkpoints
 - traceable execution history
 - reload and recovery
 - labeled saved versions
@@ -162,7 +162,7 @@ The most useful default is a four-zone layout:
 
 ```text
 +---------------------------------------------------------------------------------------+
-| Top bar: project switcher | run status | mode switch | global search | primary actions |
+| Top bar: project switcher | run status | search | primary actions | review queue |
 +------------+-------------------------------+---------------------------+----------------+
 | Left rail  | Main working pane             | Secondary pane            | Right inspector |
 | Projects   | editor / stage summary / PDF  | trace / artifact preview  | details / diff  |
@@ -180,24 +180,17 @@ This combines:
 - Linear's project and status clarity
 - Cursor's agent-status mental model
 
-## Two Interaction Modes
+## Human-In-The-Loop Invariant
 
-### Human Mode
+Projects should not be classified as `Human` versus `AutoR`.
 
-- default mode
-- every stage waits for explicit approval
-- suggestions and agent reasoning are visible
-- the user can revise one section without resuming the entire run
+The correct product model is:
 
-### AutoR Mode
+- every project is human-in-the-loop
+- every run can continue automatically between review checkpoints
+- stage approvals, scoped reruns, and manuscript iteration still return to a human decision point
 
-- AutoR continues until the next configured breakpoint
-- default breakpoint options:
-  - next stage boundary
-  - writing build failure
-  - missing artifact requirement
-  - human request
-- the UI remains inspectable while the agent runs
+That keeps AutoR aligned with the current repository and avoids implying a fully unattended project mode.
 
 ## Design Principles
 
@@ -240,6 +233,7 @@ The first backend-oriented slice is now implemented in the repository:
 This initial slice now covers a first usable local studio shell:
 
 - project index storage
+- human-in-the-loop project summaries
 - project summaries with active-run status
 - run summary loading
 - stage document loading
@@ -248,9 +242,19 @@ This initial slice now covers a first usable local studio shell:
 - read-only file content preview with improved markdown rendering
 - human iteration planning for continue, redo, and branch with generated execution briefs
 - direct manuscript preview with PDF embedding, section listing, and build-log display
+- a first read-only `Versions` view backed by derived checkpoints and execution trace events
 - local JSON HTTP endpoints for projects, runs, stages, files, artifacts, and iteration planning
 - a zero-dependency local UI shell that consumes those endpoints
 - a simple local launcher via `python studio.py --repo-root . --port 8765`
+
+Not implemented yet, despite appearing in the design docs:
+
+- named milestone persistence
+- restore / branch write actions from the browser
+- live SSE trace streaming
+- in-browser file editing
+- compile actions from the Paper page
+- VS Code / Overleaf handoff buttons
 
 The next logical step is to wire write actions into this shell: stage approvals, reruns, branch creation, LaTeX compile, and external handoff into VS Code or Overleaf.
 
@@ -261,6 +265,6 @@ The next logical step is to wire write actions into this shell: stage approvals,
 3. Read-only Files plus external handoff
 4. Writing Studio with compile actions
 5. Stage rail plus approval controls
-6. Trace inspector
-7. Version history and restore
-8. Partial iteration flows
+6. Version history and restore actions
+7. Trace inspector with live updates
+8. Partial iteration write flows

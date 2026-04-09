@@ -15,7 +15,7 @@ from .utils import STAGES, RunPaths, build_run_paths, read_text
 
 IterationMode = Literal["continue", "redo", "branch"]
 IterationScopeType = Literal["stage", "file", "subtree", "manuscript"]
-ProjectMode = Literal["human", "autor"]
+ParticipationModel = Literal["human_in_loop"]
 
 
 def _now() -> str:
@@ -33,7 +33,7 @@ class ProjectRecord:
     project_id: str
     title: str
     thesis: str
-    default_mode: ProjectMode
+    participation_model: ParticipationModel = "human_in_loop"
     tags: list[str] = field(default_factory=list)
     run_ids: list[str] = field(default_factory=list)
     active_run_id: str | None = None
@@ -45,7 +45,7 @@ class ProjectRecord:
             "project_id": self.project_id,
             "title": self.title,
             "thesis": self.thesis,
-            "default_mode": self.default_mode,
+            "participation_model": self.participation_model,
             "tags": list(self.tags),
             "run_ids": list(self.run_ids),
             "active_run_id": self.active_run_id,
@@ -55,14 +55,11 @@ class ProjectRecord:
 
     @classmethod
     def from_dict(cls, payload: dict[str, object]) -> "ProjectRecord":
-        default_mode = str(payload.get("default_mode") or "human").strip().lower() or "human"
-        if default_mode not in {"human", "autor"}:
-            default_mode = "human"
         return cls(
             project_id=str(payload.get("project_id") or "").strip(),
             title=str(payload.get("title") or "").strip(),
             thesis=str(payload.get("thesis") or "").strip(),
-            default_mode=default_mode,
+            participation_model="human_in_loop",
             tags=[str(item).strip() for item in payload.get("tags", []) if str(item).strip()],
             run_ids=[str(item).strip() for item in payload.get("run_ids", []) if str(item).strip()],
             active_run_id=str(payload["active_run_id"]) if payload.get("active_run_id") is not None else None,
@@ -107,7 +104,7 @@ class StudioProjectSummary:
     project_id: str
     title: str
     thesis: str
-    default_mode: ProjectMode
+    participation_model: ParticipationModel
     tags: list[str]
     run_ids: list[str]
     active_run_id: str | None
@@ -167,6 +164,41 @@ class StudioPaperPreview:
     build_log_content: str
 
 
+@dataclass(frozen=True)
+class StudioVersionRecord:
+    version_id: str
+    label: str
+    kind: str
+    created_at: str
+    stage_slug: str | None
+    stage_title: str | None
+    stage_number: int | None
+    run_status: str
+    artifact_paths: list[str]
+    notes: str
+    session_id: str | None = None
+
+
+@dataclass(frozen=True)
+class StudioTraceEvent:
+    event_id: str
+    timestamp: str
+    title: str
+    detail: str
+    actor: str
+    status: str
+    stage_slug: str | None = None
+    attempt_count: int | None = None
+
+
+@dataclass(frozen=True)
+class StudioRunHistory:
+    run_id: str
+    current_version_id: str | None
+    versions: list[StudioVersionRecord]
+    trace_events: list[StudioTraceEvent]
+
+
 class ProjectIndexStore:
     def __init__(self, root: Path) -> None:
         self.root = root
@@ -187,7 +219,8 @@ class ProjectIndexStore:
         self,
         title: str,
         thesis: str,
-        default_mode: ProjectMode = "human",
+        participation_model: ParticipationModel = "human_in_loop",
+        default_mode: str | None = None,
         tags: list[str] | None = None,
     ) -> ProjectRecord:
         projects = self.list_projects()
@@ -196,7 +229,7 @@ class ProjectIndexStore:
             project_id=project_id,
             title=title.strip(),
             thesis=thesis.strip(),
-            default_mode=default_mode,
+            participation_model=participation_model,
             tags=list(tags or []),
             run_ids=[],
             active_run_id=None,
@@ -221,7 +254,7 @@ class ProjectIndexStore:
                 project_id=project.project_id,
                 title=project.title,
                 thesis=project.thesis,
-                default_mode=project.default_mode,
+                participation_model=project.participation_model,
                 tags=project.tags,
                 run_ids=run_ids,
                 active_run_id=run_id if make_active else project.active_run_id,
@@ -268,12 +301,14 @@ class StudioService:
         self,
         title: str,
         thesis: str,
-        default_mode: ProjectMode = "human",
+        participation_model: ParticipationModel = "human_in_loop",
+        default_mode: str | None = None,
         tags: list[str] | None = None,
     ) -> ProjectRecord:
         return self.project_store.create_project(
             title=title,
             thesis=thesis,
+            participation_model=participation_model,
             default_mode=default_mode,
             tags=tags,
         )
@@ -302,7 +337,7 @@ class StudioService:
             project_id=project.project_id,
             title=project.title,
             thesis=project.thesis,
-            default_mode=project.default_mode,
+            participation_model=project.participation_model,
             tags=list(project.tags),
             run_ids=list(project.run_ids),
             active_run_id=project.active_run_id,
@@ -444,6 +479,19 @@ class StudioService:
             raise FileNotFoundError(f"No manuscript PDF found for run: {run_id}")
         return pdf_path.read_bytes()
 
+    def get_run_history(self, run_id: str) -> StudioRunHistory:
+        paths = self._require_run(run_id)
+        manifest = ensure_run_manifest(paths)
+        versions = self._build_versions(paths, manifest)
+        trace_events = self._build_trace_events(paths, manifest)
+        current_version_id = versions[-1].version_id if versions else None
+        return StudioRunHistory(
+            run_id=run_id,
+            current_version_id=current_version_id,
+            versions=versions,
+            trace_events=trace_events,
+        )
+
     def plan_iteration(self, request: IterationRequest) -> IterationPlan:
         run = self.get_run_summary(request.run_id)
         stage = _resolve_stage(request.base_stage_slug)
@@ -569,6 +617,185 @@ class StudioService:
             return {}
         return json.loads(path.read_text(encoding="utf-8"))
 
+    def _build_versions(self, paths: RunPaths, manifest) -> list[StudioVersionRecord]:
+        versions = [
+            StudioVersionRecord(
+                version_id="run-start",
+                label="Run Started",
+                kind="run_start",
+                created_at=manifest.created_at,
+                stage_slug=None,
+                stage_title=None,
+                stage_number=None,
+                run_status="pending",
+                artifact_paths=[],
+                notes="Initial run checkpoint before any approved stage output existed.",
+            )
+        ]
+        for entry in manifest.stages:
+            if not entry.approved:
+                if entry.status == "human_review":
+                    versions.append(
+                        StudioVersionRecord(
+                            version_id=f"awaiting-review-{entry.slug}",
+                            label=f"Awaiting Review: {entry.title}",
+                            kind="awaiting_review",
+                            created_at=entry.updated_at or manifest.updated_at,
+                            stage_slug=entry.slug,
+                            stage_title=entry.title,
+                            stage_number=entry.number,
+                            run_status=entry.status,
+                            artifact_paths=list(entry.artifact_paths),
+                            notes="Draft stage summary is ready for human review but not yet approved.",
+                            session_id=entry.session_id,
+                        )
+                    )
+                continue
+            versions.append(
+                StudioVersionRecord(
+                    version_id=f"checkpoint-{entry.slug}",
+                    label=entry.title,
+                    kind="auto_checkpoint",
+                    created_at=entry.approved_at or entry.updated_at or manifest.updated_at,
+                    stage_slug=entry.slug,
+                    stage_title=entry.title,
+                    stage_number=entry.number,
+                    run_status=entry.status,
+                    artifact_paths=list(entry.artifact_paths),
+                    notes=f"Auto checkpoint captured after human approval of {entry.title}.",
+                    session_id=entry.session_id,
+                )
+            )
+
+        if manifest.completed_at is not None:
+            final_stage = next((entry for entry in reversed(manifest.stages) if entry.approved), None)
+            versions.append(
+                StudioVersionRecord(
+                    version_id="run-complete",
+                    label="Run Completed",
+                    kind="derived_milestone",
+                    created_at=manifest.completed_at,
+                    stage_slug=final_stage.slug if final_stage is not None else None,
+                    stage_title=final_stage.title if final_stage is not None else None,
+                    stage_number=final_stage.number if final_stage is not None else None,
+                    run_status=manifest.run_status,
+                    artifact_paths=list(final_stage.artifact_paths) if final_stage is not None else [],
+                    notes="Derived completion milestone from the final approved run manifest state.",
+                    session_id=final_stage.session_id if final_stage is not None else None,
+                )
+            )
+        return versions
+
+    def _build_trace_events(self, paths: RunPaths, manifest) -> list[StudioTraceEvent]:
+        events: list[StudioTraceEvent] = []
+        heading_pattern = re.compile(r"^===\s+([^|]+?)\s+\|\s+(.+?)\s+===$")
+        if paths.logs.exists():
+            for raw_line in paths.logs.read_text(encoding="utf-8").splitlines():
+                match = heading_pattern.match(raw_line.strip())
+                if not match:
+                    continue
+                timestamp = match.group(1).strip()
+                heading = match.group(2).strip()
+                events.append(self._trace_event_from_heading(timestamp, heading))
+
+        if not any(event.title == "Run Started" for event in events):
+            events.insert(
+                0,
+                StudioTraceEvent(
+                    event_id="manifest-run-start",
+                    timestamp=manifest.created_at,
+                    title="Run Started",
+                    detail="Derived from run manifest creation time.",
+                    actor="system",
+                    status="info",
+                ),
+            )
+        if manifest.completed_at is not None and not any(event.title == "Run Completed" for event in events):
+            events.append(
+                StudioTraceEvent(
+                    event_id="manifest-run-complete",
+                    timestamp=manifest.completed_at,
+                    title="Run Completed",
+                    detail="Derived from the final run manifest state.",
+                    actor="system",
+                    status="success",
+                )
+            )
+        return events
+
+    def _trace_event_from_heading(self, timestamp: str, heading: str) -> StudioTraceEvent:
+        stage_slug: str | None = None
+        attempt_count: int | None = None
+        actor = "autor"
+        status = "info"
+        title = heading
+        detail = heading
+
+        stage_attempt = re.match(r"^([0-9]{2}_[a-z0-9_]+)\s+attempt\s+([0-9]+)\s+(.+)$", heading)
+        if stage_attempt:
+            stage_slug = stage_attempt.group(1)
+            attempt_count = int(stage_attempt.group(2))
+            tail = stage_attempt.group(3)
+            title = _humanize_trace_heading(tail)
+            detail = f"{_display_name_for_stage(stage_slug)} · attempt {attempt_count}"
+            if "prompt" in tail:
+                status = "info"
+            elif "result" in tail or "promoted" in tail:
+                status = "neutral"
+            elif "user_choice" in tail:
+                actor = "human"
+                status = "neutral"
+            return StudioTraceEvent(
+                event_id=f"{timestamp}|{heading}",
+                timestamp=timestamp,
+                title=title,
+                detail=detail,
+                actor=actor,
+                status=status,
+                stage_slug=stage_slug,
+                attempt_count=attempt_count,
+            )
+
+        stage_heading = re.match(r"^([0-9]{2}_[a-z0-9_]+)\s+(.+)$", heading)
+        if stage_heading:
+            stage_slug = stage_heading.group(1)
+            tail = stage_heading.group(2)
+            title = _humanize_trace_heading(tail)
+            detail = _display_name_for_stage(stage_slug)
+            if "approved" in tail or "package" in tail:
+                actor = "human" if "approved" in tail else "autor"
+                status = "success"
+            elif "error" in tail:
+                status = "warning"
+            elif "user_choice" in tail:
+                actor = "human"
+                status = "neutral"
+            return StudioTraceEvent(
+                event_id=f"{timestamp}|{heading}",
+                timestamp=timestamp,
+                title=title,
+                detail=detail,
+                actor=actor,
+                status=status,
+                stage_slug=stage_slug,
+                attempt_count=attempt_count,
+            )
+
+        title = _humanize_trace_heading(heading)
+        detail = heading
+        if "complete" in heading:
+            status = "success"
+        elif "start" in heading:
+            status = "info"
+        return StudioTraceEvent(
+            event_id=f"{timestamp}|{heading}",
+            timestamp=timestamp,
+            title=title,
+            detail=detail,
+            actor="system",
+            status=status,
+        )
+
     def _find_paper_pdf(self, paths: RunPaths) -> Path | None:
         preferred_candidates = [
             paths.writing_dir / "main.pdf",
@@ -618,6 +845,18 @@ def _affected_stage_slugs(base_stage_slug: str, scope_type: IterationScopeType) 
     if scope_type in {"file", "subtree", "manuscript"}:
         return [stage.slug for stage in STAGES if stage.number >= base_stage.number]
     return [base_stage.slug]
+
+
+def _display_name_for_stage(stage_slug: str) -> str:
+    for stage in STAGES:
+        if stage.slug == stage_slug:
+            return stage.stage_title
+    return stage_slug.replace("_", " ")
+
+
+def _humanize_trace_heading(value: str) -> str:
+    normalized = value.replace("_", " ").strip()
+    return " ".join(part.capitalize() for part in normalized.split())
 
 
 def studio_to_dict(value):

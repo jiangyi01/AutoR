@@ -13,7 +13,7 @@
           <p class="eyebrow">AutoR Studio</p>
           <h1>Research Control Workspace</h1>
           <p class="topbar-copy">
-            Split the workflow into focused pages for project control, human review, read-only files, and paper preview.
+            Every project is human-in-the-loop. Browse focused pages for project control, review, files, paper, and execution history.
           </p>
         </div>
         <div class="topbar-actions">
@@ -44,13 +44,6 @@
                     placeholder="Track routing, stability, and paper packaging."
                     required
                   ></textarea>
-                </label>
-                <label>
-                  <span>Default mode</span>
-                  <select id="project-mode" name="default_mode">
-                    <option value="human">Human</option>
-                    <option value="autor">AutoR</option>
-                  </select>
                 </label>
                 <button class="button button-primary" type="submit">Create Project</button>
               </form>
@@ -91,6 +84,7 @@
               <button class="page-link" data-page="review" type="button">Human Review</button>
               <button class="page-link" data-page="files" type="button">Files</button>
               <button class="page-link" data-page="paper" type="button">Paper</button>
+              <button class="page-link" data-page="history" type="button">Versions</button>
             </nav>
           </section>
 
@@ -321,6 +315,64 @@
                     <h3>Build log</h3>
                     <div id="paper-build-log" class="document-body empty-state">No build log found.</div>
                   </section>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <section id="page-history" class="page">
+            <div class="page-grid history-grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Project versions</p>
+                    <h2>Derived Checkpoints</h2>
+                  </div>
+                  <span id="version-count" class="meta">0</span>
+                </div>
+                <div class="panel-body">
+                  <div class="banner subtle">
+                    This first history slice is read-only. It derives checkpoints from the run manifest and approved stages before named milestones are wired in.
+                  </div>
+                  <div id="version-list" class="version-list"></div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Checkpoint details</p>
+                    <h2 id="history-title">Version detail</h2>
+                  </div>
+                  <span id="history-meta" class="meta"></span>
+                </div>
+                <div class="panel-body split-stack">
+                  <div id="history-summary" class="copy-block empty-state">
+                    Select a checkpoint to inspect its stage summary and changed artifacts.
+                  </div>
+                  <section class="inspector-block">
+                    <h3>Artifacts At This Checkpoint</h3>
+                    <ul id="history-artifacts" class="artifact-summary"></ul>
+                  </section>
+                  <section class="inspector-block">
+                    <h3>Stage Summary</h3>
+                    <article id="history-stage-preview" class="document-body empty-state">
+                      Select a checkpoint to preview its associated stage summary.
+                    </article>
+                  </section>
+                </div>
+              </section>
+
+              <aside class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Execution trace</p>
+                    <h2>Timeline</h2>
+                  </div>
+                  <span id="trace-count" class="meta">0 events</span>
+                </div>
+                <div class="panel-body">
+                  <div id="trace-timeline" class="trace-timeline"></div>
                 </div>
               </aside>
             </div>

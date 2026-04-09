@@ -66,11 +66,11 @@ class StudioHttpTests(unittest.TestCase):
             {
                 "title": "Reasoning Bench",
                 "thesis": "Track benchmark experiments.",
-                "default_mode": "human",
                 "tags": ["bench", "reasoning"],
             },
         )
         self.assertEqual(created["project_id"], "reasoning-bench")
+        self.assertEqual(created["participation_model"], "human_in_loop")
 
         attached = self._request_json(
             "POST",
@@ -90,6 +90,14 @@ class StudioHttpTests(unittest.TestCase):
         detail = self._request_json("GET", f"/api/projects/{created['project_id']}")
         self.assertEqual(detail["project_id"], created["project_id"])
         self.assertEqual(detail["latest_completed_stage_slug"], STAGE_04.slug)
+
+    def test_history_endpoint(self) -> None:
+        history = self._request_json("GET", f"/api/runs/{self.run_id}/history")
+        self.assertEqual(history["run_id"], self.run_id)
+        self.assertTrue(any(version["kind"] == "auto_checkpoint" for version in history["versions"]))
+        self.assertTrue(any(version["kind"] == "awaiting_review" for version in history["versions"]))
+        self.assertTrue(any(event["title"] == "Run Started" for event in history["trace_events"]))
+        self.assertTrue(any(event["actor"] == "human" for event in history["trace_events"]))
 
     def test_run_and_stage_endpoints(self) -> None:
         summary = self._request_json("GET", f"/api/runs/{self.run_id}")
@@ -160,6 +168,17 @@ class StudioHttpTests(unittest.TestCase):
         initialize_run_config(paths, model="sonnet", venue="neurips_2025")
         initialize_run_manifest(paths)
         write_text(paths.user_input, "HTTP run for studio service.")
+        write_text(
+            paths.logs,
+            (
+                "=== 2026-04-09T10:00:00 | run_start ===\n"
+                "Run root\n\n"
+                "=== 2026-04-09T10:00:01 | 01_literature_survey approved ===\n"
+                "Approved\n\n"
+                "=== 2026-04-09T10:00:02 | 05_experimentation attempt 2 user_choice ===\n"
+                "Human review pending\n"
+            ),
+        )
         write_text(paths.literature_dir / "survey_notes.md", "# Survey\n\n- Core evidence.\n")
         write_text(paths.data_dir / "dataset_manifest.json", json.dumps({"dataset": "digits"}))
         write_text(paths.results_dir / "results.json", json.dumps({"accuracy": 0.91}))

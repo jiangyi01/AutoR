@@ -47,15 +47,25 @@ Covered in the current implementation:
 
 - project index storage
 - project summaries for a project hub view
+- fixed human-in-the-loop participation at the project layer
 - run summary loading
 - stage document access
 - workspace file tree construction
 - read-only file content preview loading
 - iteration planning for continue, redo, and branch with generated execution briefs
 - manuscript preview metadata plus PDF streaming
+- derived version history plus normalized execution trace events
 - a lightweight local JSON HTTP adapter for the first read-oriented UI flows
-- a lightweight local browser shell split into Overview, Human Review, Files, and Paper pages
+- a lightweight local browser shell split into Overview, Human Review, Files, Paper, and Versions pages
 - improved markdown rendering for stage and note previews
+
+Still planned, not implemented in this branch:
+
+- live trace streaming
+- named milestones and restore actions
+- browser-triggered rerun / approval writes
+- in-browser manuscript editing and compile actions
+- VS Code / Overleaf handoff buttons
 
 Current launcher options:
 
@@ -85,6 +95,7 @@ python -m src.studio_http --repo-root . --host 127.0.0.1 --port 8765
 - human review planner
 - read-only file browser
 - paper preview page
+- versions and trace page
 - API client
 - event stream client
 
