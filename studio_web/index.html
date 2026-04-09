@@ -11,7 +11,7 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">AutoR Studio</p>
-          <h1>Run Workspace Preview</h1>
+          <h1>Project Hub And Run Workspace</h1>
         </div>
         <div class="topbar-actions">
           <span id="connection-status" class="badge">Connecting</span>
@@ -20,19 +20,65 @@
       </header>
 
       <main class="layout">
-        <aside class="panel sidebar">
-          <div class="panel-header">
-            <h2>Runs</h2>
-            <span id="run-count" class="meta">0</span>
-          </div>
-          <div id="runs-list" class="runs-list"></div>
+        <aside class="sidebar-stack">
+          <section class="panel sidebar">
+            <div class="panel-header">
+              <h2>Projects</h2>
+              <span id="project-count" class="meta">0</span>
+            </div>
+            <div class="panel-body">
+              <form id="project-form" class="project-form">
+                <label>
+                  <span>Title</span>
+                  <input id="project-title" name="title" type="text" placeholder="Sparse MoE Study" required />
+                </label>
+                <label>
+                  <span>Thesis</span>
+                  <textarea
+                    id="project-thesis"
+                    name="thesis"
+                    rows="3"
+                    placeholder="Track routing, stability, and paper packaging."
+                    required
+                  ></textarea>
+                </label>
+                <label>
+                  <span>Default mode</span>
+                  <select id="project-mode" name="default_mode">
+                    <option value="human">Human</option>
+                    <option value="autor">AutoR</option>
+                  </select>
+                </label>
+                <button class="button button-primary" type="submit">Create Project</button>
+              </form>
+              <div id="projects-list" class="projects-list"></div>
+            </div>
+          </section>
+
+          <section class="panel sidebar">
+            <div class="panel-header">
+              <h2>Runs</h2>
+              <span id="run-count" class="meta">0</span>
+            </div>
+            <div class="panel-body">
+              <div class="attach-row">
+                <button id="attach-run-button" class="button button-secondary" type="button">
+                  Attach Selected Run To Project
+                </button>
+              </div>
+              <div id="runs-list" class="runs-list"></div>
+            </div>
+          </section>
         </aside>
 
         <section class="workspace">
           <div class="workspace-grid">
             <nav class="panel stages-panel">
               <div class="panel-header">
-                <h2>Stages</h2>
+                <div>
+                  <p id="active-project-label" class="eyebrow">No project selected</p>
+                  <h2>Stages</h2>
+                </div>
                 <span id="run-status" class="meta">Idle</span>
               </div>
               <div id="stage-rail" class="stage-rail"></div>
@@ -42,12 +88,12 @@
               <div class="panel-header">
                 <div>
                   <p id="run-title" class="eyebrow">No run selected</p>
-                  <h2 id="document-title">Stage Document</h2>
+                  <h2 id="document-title">Workspace Preview</h2>
                 </div>
                 <span id="document-meta" class="meta"></span>
               </div>
               <article id="stage-document" class="document-body empty-state">
-                Select a run to inspect its current state.
+                Select a project or run to inspect stage summaries and workspace files.
               </article>
             </section>
 
@@ -56,14 +102,50 @@
                 <h2>Inspector</h2>
                 <span id="artifact-total" class="meta">0 artifacts</span>
               </div>
+
               <section class="inspector-block">
                 <h3>Run Summary</h3>
                 <dl id="run-summary" class="summary-list"></dl>
               </section>
+
               <section class="inspector-block">
                 <h3>Artifacts</h3>
                 <ul id="artifact-summary" class="artifact-summary"></ul>
               </section>
+
+              <section class="inspector-block">
+                <h3>Iteration Planner</h3>
+                <form id="iteration-form" class="iteration-form">
+                  <label>
+                    <span>Mode</span>
+                    <select id="iteration-mode" name="mode">
+                      <option value="continue">Continue</option>
+                      <option value="redo">Redo</option>
+                      <option value="branch">Branch</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Stage</span>
+                    <select id="iteration-stage" name="base_stage_slug"></select>
+                  </label>
+                  <label>
+                    <span>Scope type</span>
+                    <select id="iteration-scope-type" name="scope_type">
+                      <option value="stage">Stage</option>
+                      <option value="file">File</option>
+                      <option value="subtree">Subtree</option>
+                      <option value="manuscript">Manuscript</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Scope value</span>
+                    <input id="iteration-scope-value" name="scope_value" type="text" placeholder="workspace/writing/sections/method.tex" />
+                  </label>
+                  <button class="button button-primary" type="submit">Plan Iteration</button>
+                </form>
+                <div id="iteration-plan" class="plan-output empty-state">No iteration plan generated yet.</div>
+              </section>
+
               <section class="inspector-block">
                 <h3>Workspace Tree</h3>
                 <div id="file-tree" class="file-tree"></div>

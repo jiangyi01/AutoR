@@ -74,9 +74,11 @@ The current implementation now includes a lightweight local HTTP layer on top of
 The foundation currently stabilizes:
 
 - project metadata storage under a local app metadata root
+- project summaries for dashboard-style project cards
 - run summary loading from manifests and configs
 - stage document access
 - workspace file tree generation
+- file content access for preview panes
 - iteration planning for `continue`, `redo`, and `branch`
 - local JSON endpoints over the backend core
 
@@ -98,6 +100,8 @@ http://127.0.0.1:8765/studio/
 
 - `GET /healthz`
 - `GET /api/projects`
+- `GET /api/projects/overview`
+- `GET /api/projects/{project_id}`
 - `POST /api/projects`
 - `POST /api/projects/{project_id}/runs`
 - `GET /api/runs`

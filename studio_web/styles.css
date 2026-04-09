@@ -34,7 +34,7 @@ body {
 }
 
 .app-shell {
-  max-width: 1500px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 
@@ -69,13 +69,19 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: 360px 1fr;
   gap: 20px;
+}
+
+.sidebar-stack {
+  display: grid;
+  gap: 20px;
+  align-content: start;
 }
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 320px;
+  grid-template-columns: 260px minmax(0, 1fr) 340px;
   gap: 20px;
 }
 
@@ -96,35 +102,50 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
+.panel-body {
+  padding: 16px 18px 20px;
+}
+
 .sidebar,
 .stages-panel,
 .inspector-panel {
-  min-height: 70vh;
+  min-height: 30vh;
 }
 
 .document-panel {
-  min-height: 70vh;
+  min-height: 75vh;
   display: flex;
   flex-direction: column;
 }
 
 .runs-list,
+.projects-list,
 .stage-rail,
-.inspector-block,
 .file-tree,
 .document-body {
-  padding: 16px 18px 20px;
-}
-
-.runs-list,
-.stage-rail,
-.file-tree {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
+.runs-list,
+.projects-list,
+.stage-rail,
+.file-tree {
+  padding: 0;
+}
+
+.document-body {
+  padding: 16px 18px 20px;
+  flex: 1;
+  overflow: auto;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-family: "Source Serif 4", Georgia, serif;
+}
+
 .run-card,
+.project-card,
 .stage-item {
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -132,27 +153,43 @@ body {
   background: var(--card);
 }
 
-.run-card {
+.run-card,
+.project-card {
   cursor: pointer;
   transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .run-card:hover,
+.project-card:hover,
 .stage-item:hover {
   border-color: rgba(31, 122, 106, 0.45);
 }
 
 .run-card.is-active,
+.project-card.is-active,
 .stage-item.is-active {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(31, 122, 106, 0.12);
 }
 
+.project-card-header,
 .run-card-title,
 .stage-title {
   font-weight: 700;
 }
 
+.project-card-title {
+  margin-right: 8px;
+}
+
+.project-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.project-card-thesis,
 .run-card-meta,
 .stage-meta,
 .meta {
@@ -160,15 +197,33 @@ body {
   font-size: 13px;
 }
 
+.project-card-thesis {
+  margin: 8px 0;
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tag,
+.mode-chip,
 .stage-status {
   display: inline-flex;
-  margin-top: 8px;
+  align-items: center;
   padding: 4px 8px;
   border-radius: 999px;
   background: var(--surface);
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.mode-chip {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .stage-status.status-approved {
@@ -186,18 +241,6 @@ body {
 .stage-status.status-stale {
   background: rgba(198, 90, 70, 0.14);
   color: var(--danger);
-}
-
-.document-body {
-  flex: 1;
-  overflow: auto;
-  white-space: pre-wrap;
-  line-height: 1.6;
-  font-family: "Source Serif 4", Georgia, serif;
-}
-
-.empty-state {
-  color: var(--muted);
 }
 
 .summary-list {
@@ -233,9 +276,18 @@ body {
 }
 
 .tree-label {
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 0;
   color: var(--ink);
   font-size: 13px;
   font-family: "JetBrains Mono", "SFMono-Regular", monospace;
+  cursor: pointer;
+}
+
+.tree-label:hover {
+  color: var(--accent);
 }
 
 .tree-children {
@@ -269,12 +321,71 @@ body {
   cursor: pointer;
 }
 
+.button-primary {
+  background: var(--accent);
+  color: white;
+}
+
 .button-secondary {
   background: var(--ink);
   color: white;
 }
 
-@media (max-width: 1280px) {
+.project-form,
+.iteration-form {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.project-form label,
+.iteration-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.project-form input,
+.project-form textarea,
+.project-form select,
+.iteration-form input,
+.iteration-form select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+}
+
+.attach-row {
+  margin-bottom: 14px;
+}
+
+.inspector-block {
+  padding: 16px 18px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.inspector-block:first-of-type {
+  border-top: none;
+}
+
+.plan-output {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+
+.empty-state {
+  color: var(--muted);
+}
+
+@media (max-width: 1400px) {
   .layout,
   .workspace-grid {
     grid-template-columns: 1fr;

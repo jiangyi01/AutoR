@@ -57,6 +57,20 @@ class StudioServiceTest(unittest.TestCase):
         self.assertEqual(projects[0].run_ids, [self.review_run_id])
         self.assertEqual(projects[0].tags, ["moe", "routing"])
 
+    def test_get_project_summary_includes_active_run_state(self) -> None:
+        project = self.service.create_project(
+            title="Sparse MoE Study",
+            thesis="Compare routing and training stability choices.",
+        )
+        self.service.attach_run_to_project(project.project_id, self.review_run_id)
+
+        summary = self.service.get_project_summary(project.project_id)
+
+        self.assertEqual(summary.project_id, project.project_id)
+        self.assertEqual(summary.active_run_id, self.review_run_id)
+        self.assertEqual(summary.latest_run_status, "human_review")
+        self.assertEqual(summary.latest_completed_stage_slug, STAGE_04.slug)
+
     def test_get_run_summary_reads_manifest_and_artifacts(self) -> None:
         summary = self.service.get_run_summary(self.review_run_id)
 

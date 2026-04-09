@@ -55,7 +55,7 @@ class StudioHttpTests(unittest.TestCase):
         with urlopen(request) as response:
             body = response.read().decode("utf-8")
         self.assertIn("AutoR Studio", body)
-        self.assertIn("Run Workspace Preview", body)
+        self.assertIn("Project Hub And Run Workspace", body)
 
     def test_project_endpoints(self) -> None:
         created = self._request_json(
@@ -80,6 +80,14 @@ class StudioHttpTests(unittest.TestCase):
         listed = self._request_json("GET", "/api/projects")
         self.assertEqual(len(listed["projects"]), 1)
         self.assertEqual(listed["projects"][0]["run_ids"], [self.run_id])
+
+        overview = self._request_json("GET", "/api/projects/overview")
+        self.assertEqual(overview["projects"][0]["active_run_id"], self.run_id)
+        self.assertEqual(overview["projects"][0]["latest_run_status"], "human_review")
+
+        detail = self._request_json("GET", f"/api/projects/{created['project_id']}")
+        self.assertEqual(detail["project_id"], created["project_id"])
+        self.assertEqual(detail["latest_completed_stage_slug"], STAGE_04.slug)
 
     def test_run_and_stage_endpoints(self) -> None:
         summary = self._request_json("GET", f"/api/runs/{self.run_id}")

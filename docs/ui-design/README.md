@@ -240,9 +240,11 @@ The first backend-oriented slice is now implemented in the repository:
 This initial slice focuses on the state model required by the generated Project Hub and Run Workspace concepts:
 
 - project index storage
+- project summaries with active-run status
 - run summary loading
 - stage document loading
 - workspace file tree browsing
+- file content preview
 - iteration planning for continue, redo, and branch
 - local JSON HTTP endpoints for projects, runs, stages, files, artifacts, and iteration planning
 - a zero-dependency local UI shell that consumes those endpoints

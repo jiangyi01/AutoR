@@ -66,6 +66,16 @@ def build_handler(service: StudioService, static_root: Path):
                 self._write_json(HTTPStatus.OK, payload)
                 return
 
+            if parts == ["api", "projects", "overview"]:
+                payload = {"projects": [studio_to_dict(item) for item in service.list_project_summaries()]}
+                self._write_json(HTTPStatus.OK, payload)
+                return
+
+            if len(parts) == 3 and parts[:2] == ["api", "projects"]:
+                payload = studio_to_dict(service.get_project_summary(parts[2]))
+                self._write_json(HTTPStatus.OK, payload)
+                return
+
             if parts == ["api", "runs"]:
                 self._write_json(HTTPStatus.OK, {"run_ids": service.list_run_ids()})
                 return

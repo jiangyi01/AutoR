@@ -46,9 +46,11 @@ Delivered now:
 Covered in the current implementation:
 
 - project index storage
+- project summaries for a project hub view
 - run summary loading
 - stage document access
 - workspace file tree construction
+- file content preview loading
 - iteration planning for continue, redo, and branch
 - a lightweight local JSON HTTP adapter for the first read-oriented UI flows
 - a lightweight local browser shell for run browsing and stage inspection

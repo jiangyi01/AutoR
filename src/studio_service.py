@@ -103,6 +103,20 @@ class StudioRunSummary:
 
 
 @dataclass(frozen=True)
+class StudioProjectSummary:
+    project_id: str
+    title: str
+    thesis: str
+    default_mode: ProjectMode
+    tags: list[str]
+    run_ids: list[str]
+    active_run_id: str | None
+    latest_run_status: str | None
+    latest_completed_stage_slug: str | None
+    updated_at: str
+
+
+@dataclass(frozen=True)
 class FileTreeNode:
     name: str
     rel_path: str
@@ -251,6 +265,36 @@ class StudioService:
 
     def list_projects(self) -> list[ProjectRecord]:
         return self.project_store.list_projects()
+
+    def list_project_summaries(self) -> list[StudioProjectSummary]:
+        return [self.get_project_summary(project.project_id) for project in self.project_store.list_projects()]
+
+    def get_project_summary(self, project_id: str) -> StudioProjectSummary:
+        project = next((item for item in self.project_store.list_projects() if item.project_id == project_id), None)
+        if project is None:
+            raise KeyError(f"Unknown project id: {project_id}")
+
+        run_id = project.active_run_id or (project.run_ids[-1] if project.run_ids else None)
+        latest_run_status: str | None = None
+        latest_completed_stage_slug: str | None = None
+        if run_id is not None:
+            run_summary = self.get_run_summary(run_id)
+            latest_run_status = run_summary.run_status
+            approved = [stage.slug for stage in run_summary.stages if stage.approved]
+            latest_completed_stage_slug = approved[-1] if approved else None
+
+        return StudioProjectSummary(
+            project_id=project.project_id,
+            title=project.title,
+            thesis=project.thesis,
+            default_mode=project.default_mode,
+            tags=list(project.tags),
+            run_ids=list(project.run_ids),
+            active_run_id=project.active_run_id,
+            latest_run_status=latest_run_status,
+            latest_completed_stage_slug=latest_completed_stage_slug,
+            updated_at=project.updated_at,
+        )
 
     def attach_run_to_project(self, project_id: str, run_id: str, make_active: bool = True) -> ProjectRecord:
         self._require_run(run_id)
