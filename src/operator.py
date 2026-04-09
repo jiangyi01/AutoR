@@ -419,6 +419,7 @@ Original stderr:
         non_json_lines: list[str] = []
         ended_with_newline = True
         observed_session_id: str | None = None
+        tool_names: dict[str, str] = {}
         malformed_json_count = 0
         timed_out = threading.Event()
         start_time = time.monotonic()
@@ -439,9 +440,6 @@ Original stderr:
             for raw_line in process.stdout:
                 if timed_out.is_set():
                     break
-
-                self.output_stream.write(raw_line)
-                self.output_stream.flush()
 
                 ended_with_newline = raw_line.endswith("\n")
                 line = raw_line.rstrip("\n")
@@ -519,7 +517,13 @@ Original stderr:
                 non_json_lines=non_json_lines,
                 raw_lines=raw_lines,
             )
-            return -1, stdout_text, "Stage timed out", observed_session_id
+            return -1, stdout_text, "Stage timed out", observed_session_id, {
+                "raw_line_count": len(raw_lines),
+                "non_json_line_count": len(non_json_lines),
+                "malformed_json_count": malformed_json_count,
+                "observed_session_id": observed_session_id,
+                "timed_out": True,
+            }
 
         exit_code = process.wait()
         if raw_lines and not ended_with_newline:

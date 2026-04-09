@@ -4,5 +4,6 @@ runs/
 .tmp/
 AGENTS.md
 .codex
+configs/diagram_config.yaml
 docs/
 examples/

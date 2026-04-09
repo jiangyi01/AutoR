@@ -217,6 +217,153 @@ class TestStageTimeout(unittest.TestCase):
         op = ClaudeOperator(fake_mode=True, stage_timeout=7200)
         self.assertEqual(op.stage_timeout, 7200)
 
+    def test_streaming_command_timeout_returns_consistent_tuple(self) -> None:
+        class FakeStdout:
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                raise StopIteration
+
+            def close(self) -> None:
+                return None
+
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdout = FakeStdout()
+
+            def terminate(self) -> None:
+                return None
+
+            def wait(self, timeout=None) -> int:
+                return 0
+
+            def kill(self) -> None:
+                return None
+
+        class ImmediateTimer:
+            def __init__(self, timeout, fn) -> None:
+                self.fn = fn
+                self.daemon = False
+
+            def start(self) -> None:
+                self.fn()
+
+            def cancel(self) -> None:
+                return None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = build_run_paths(Path(tmp) / "run")
+            ensure_run_layout(paths)
+            write_text(paths.user_input, "timeout goal")
+            initialize_memory(paths, "timeout goal")
+            output = io.StringIO()
+            op = ClaudeOperator(fake_mode=False, output_stream=output, stage_timeout=1)
+
+            with patch("src.operator.subprocess.Popen", return_value=FakeProcess()), patch(
+                "src.operator.threading.Timer",
+                ImmediateTimer,
+            ):
+                exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = op._run_streaming_command(
+                    command=["claude"],
+                    cwd=paths.run_root,
+                    stage=STAGE_01,
+                    attempt_no=1,
+                    paths=paths,
+                    mode="real_start",
+                )
+
+            self.assertEqual(exit_code, -1)
+            self.assertEqual(stdout_text, "")
+            self.assertEqual(stderr_text, "Stage timed out")
+            self.assertIsNone(observed_session_id)
+            self.assertTrue(stream_meta["timed_out"])
+            self.assertEqual(stream_meta["raw_line_count"], 0)
+
+
+class TestStreamingRendering(unittest.TestCase):
+    def test_json_stream_is_rendered_without_raw_json_dump(self) -> None:
+        class FakeStdout:
+            def __init__(self, lines: list[str]) -> None:
+                self._lines = iter(lines)
+
+            def __iter__(self):
+                return self
+
+            def __next__(self) -> str:
+                return next(self._lines)
+
+            def close(self) -> None:
+                return None
+
+        class FakeProcess:
+            def __init__(self, lines: list[str]) -> None:
+                self.stdout = FakeStdout(lines)
+
+            def terminate(self) -> None:
+                return None
+
+            def wait(self, timeout=None) -> int:
+                return 0
+
+            def kill(self) -> None:
+                return None
+
+        class NoopTimer:
+            def __init__(self, timeout, fn) -> None:
+                self.daemon = False
+
+            def start(self) -> None:
+                return None
+
+            def cancel(self) -> None:
+                return None
+
+        class RecordingUI:
+            def __init__(self) -> None:
+                self.events: list[tuple[dict[str, object], dict[str, str]]] = []
+                self.raw_lines: list[str] = []
+
+            def show_stream_event(self, payload, tool_names) -> None:
+                self.events.append((payload, dict(tool_names)))
+
+            def show_raw_stream_line(self, line: str) -> None:
+                self.raw_lines.append(line)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = build_run_paths(Path(tmp) / "run")
+            ensure_run_layout(paths)
+            write_text(paths.user_input, "json stream goal")
+            initialize_memory(paths, "json stream goal")
+            output = io.StringIO()
+            ui = RecordingUI()
+            op = ClaudeOperator(fake_mode=False, output_stream=output, ui=ui)
+            lines = [
+                '{"type":"assistant","message":{"content":[{"type":"text","text":"hello from claude"}]}}\n'
+            ]
+
+            with patch("src.operator.subprocess.Popen", return_value=FakeProcess(lines)), patch(
+                "src.operator.threading.Timer",
+                NoopTimer,
+            ):
+                exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = op._run_streaming_command(
+                    command=["claude"],
+                    cwd=paths.run_root,
+                    stage=STAGE_01,
+                    attempt_no=1,
+                    paths=paths,
+                    mode="real_start",
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stderr_text, "")
+            self.assertIsNone(observed_session_id)
+            self.assertIn("hello from claude", stdout_text)
+            self.assertEqual(stream_meta["malformed_json_count"], 0)
+            self.assertEqual(output.getvalue(), "")
+            self.assertEqual(ui.raw_lines, [])
+            self.assertEqual(len(ui.events), 1)
+
 
 class TestFakeOperatorAttemptContinuity(unittest.TestCase):
     def test_attempt_no_continues_after_resume(self) -> None:

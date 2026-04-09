@@ -70,7 +70,7 @@ AutoR takes a different position: research is too important to hand over as a bl
 | --- | --- |
 | **Human-centered research execution** | AutoR is not an autonomous scientist. AI handles execution; humans own the direction at every stage boundary. |
 | **A research harness over Claude Code** | AutoR does not reinvent the coding agent. It constrains, validates, and operationalizes Claude Code inside a real research workflow. |
-| **Every run is a reproducible research artifact** | A run leaves behind prompts, logs, stage summaries, code, data, results, figures, paper sources, and approval trail under `runs/<run_id>/`. |
+| **Every run is a reproducible research artifact** | A run leaves behind prompts, logs, stage summaries, code, data, results, figures, writing sources, compiled artifacts, and approval trail under `runs/<run_id>/`. |
 | **Verifiable outputs, not paper-shaped theater** | AutoR does not ask "does this look conference-ready?" It asks "can you verify every claim with artifacts?" |
 
 ### What AutoR Guarantees
@@ -83,7 +83,7 @@ AutoR takes a different position: research is too important to hand over as a bl
 
 ### Why AutoR?
 
-Many systems aim to generate papers that *look* ready.
+Many systems aim to generate research outputs that *look* ready.
 
 AutoR takes a harder path:
 
@@ -107,16 +107,16 @@ AutoR already has a full example run used throughout the repository: `runs/20260
 
 | What the run produced | What it demonstrates |
 | --- | --- |
-| [example_paper.pdf](assets/examples/example_paper.pdf) | A full compiled paper artifact |
+| [example_paper.pdf](assets/examples/example_paper.pdf) | A compiled manuscript artifact within a broader research package |
 | Executable research code | The run is not just a writing pipeline |
 | Machine-readable datasets and result files | Claims are backed by inspectable experiment outputs |
-| Real figures used in the paper | The run produces publication-style visuals, not placeholders |
+| Real figures used in the research package | The run produces publication-style visuals, not placeholders |
 | Review and dissemination materials | The workflow continues past writing into release readiness |
 
 Highlighted outcomes from that run:
 
 - `AGSNv2` reached **36.21 ± 1.08** on Actor.
-- The system produced a full manuscript package with real figures and artifacts.
+- The system produced a full research package with real figures, writing sources, and auditable artifacts.
 - The final run preserved the full human-in-the-loop approval trail.
 
 ### Terminal Experience
@@ -148,24 +148,65 @@ AutoR is designed for terminal-first execution, but the interaction layer is not
   </tr>
 </table>
 
-### Paper Preview
+### Research Output Gallery
+
+The manuscript pages below are only the visible surface of larger AutoR runs. To keep the showcase compact and comparable, this gallery uses a consistent 4 × 2 layout: four artifact-backed research outputs, two representative pages from each, and a short note on what each run is demonstrating.
 
 <table>
   <tr>
-    <td align="center" valign="top">
-      <strong>Page 1</strong><br />
-      Title, abstract, framing<br />
-      <img src="assets/examples/example_paper_page1.png" alt="Example paper page 1" width="220" />
+    <td valign="top" width="23%">
+      <strong>Output 1</strong><br />
+      A complete end-to-end AutoR run. The pair below shows the opening manuscript page and a later evidence-heavy page where algorithm, tables, and quantitative results appear together.
     </td>
     <td align="center" valign="top">
-      <strong>Page 5</strong><br />
-      Method and training algorithm<br />
-      <img src="assets/examples/example_paper_page5.png" alt="Example paper page 5" width="220" />
+      <img src="assets/examples/example_paper_page1.png" alt="Output 1 page 1" width="220" /><br />
+      <strong>Page 1</strong>
     </td>
     <td align="center" valign="top">
-      <strong>Page 7</strong><br />
-      Main tables and per-seed results<br />
-      <img src="assets/examples/example_paper_page7.png" alt="Example paper page 7" width="220" />
+      <img src="assets/examples/example_paper_page5.png" alt="Output 1 evidence page" width="220" /><br />
+      <strong>Evidence Page</strong>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top" width="23%">
+      <strong>Output 2</strong><br />
+      <em>Do More Experts Help?</em> A parameter-matched MoE-LoRA study. The selected pages show the framing page and a chart-heavy evidence page.
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_1_page1.png" alt="Output 2 page 1" width="220" /><br />
+      <strong>Page 1</strong>
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_1_results.png" alt="Output 2 evidence page" width="220" /><br />
+      <strong>Evidence Page</strong>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top" width="23%">
+      <strong>Output 3</strong><br />
+      <em>Attention Sink Onset in Tiny Transformers</em> A controlled factorial study. The chosen pages show the opening page and a later structured overview page with visual decomposition.
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_2_page1.png" alt="Output 3 page 1" width="220" /><br />
+      <strong>Page 1</strong>
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_2_overview.png" alt="Output 3 overview page" width="220" /><br />
+      <strong>Overview Page</strong>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top" width="23%">
+      <strong>Output 4</strong><br />
+      <em>HSOD: Harmonic Spectral Operator Decomposition</em> A stability-focused time-series study. The pair below shows the framing page and a later page with dense training-dynamics plots.
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_3_page1.png" alt="Output 4 page 1" width="220" /><br />
+      <strong>Page 1</strong>
+    </td>
+    <td align="center" valign="top">
+      <img src="assets/community_papers/other_run_3_results.png" alt="Output 4 analysis page" width="220" /><br />
+      <strong>Analysis Page</strong>
     </td>
   </tr>
 </table>
@@ -189,6 +230,9 @@ AI handles execution load; humans steer the research when direction actually mat
 - Python 3.10+
 - Claude CLI available on `PATH` for real runs
 - Local TeX tools are helpful for Stage 07, but not required for smoke tests
+- For `--research-diagram` (Gemini-generated method illustration inserted into the LaTeX paper):
+  - `pip install google-genai` (the `google.genai` SDK is **not** a default dependency; if it is missing the diagram step prints `Diagram generation failed: No module named 'google'` and the rest of the run continues unaffected)
+  - A Gemini API key exposed via `GOOGLE_API_KEY` or `GEMINI_API_KEY`, or a local `configs/diagram_config.yaml` (see `configs/diagram_config.template.yaml`)
 
 ### Common Commands
 
@@ -567,7 +611,7 @@ A run with only markdown notes does not pass validation.
 - run manifest, rollback, and stale tracking
 - artifact index and experiment manifest
 - stage handoff context
-- paper/release package generation after approval
+- manuscript/release package generation after approval
 - artifact-aware validation
 - resume, `--redo-stage`, and `--rollback-stage`
 - lightweight venue profiles for Stage 07 writing
@@ -605,8 +649,8 @@ Implemented milestone:
 - Machine-readable run manifest. Add a single source of truth such as `run_manifest.json` to track stage status, approval state, stale dependencies, session IDs, and key artifact pointers. This should make both automation and future UI work much cleaner.
 - Continuation handoff compression. Add a short machine-generated stage handoff file that summarizes what is already correct, what is missing, and which files matter most. This should reduce context growth and make continuation more stable over long runs.
 - ~~Result schema and artifact indexing.~~ Standardize `workspace/data/`, `workspace/results/`, and `workspace/figures/` around explicit schemas and generate an artifact index automatically. The workflow now writes `artifact_index.json`, carries basic inferred or declared schema metadata, and feeds the index into later-stage prompt context and the writing manifest.
-- Writing pipeline hardening. Turn Stage 07 into a reliable manuscript production pipeline with stable conference and journal-style paper structures, bibliography handling, table and figure inclusion, and reproducible PDF compilation. The goal is a submission-ready paper package, not just writing notes.
-- Review and dissemination package. Expand Stage 08 so it produces readiness checklists, threats-to-validity notes, artifact manifests, release notes, and external-facing research bundles. The final stage should feel like packaging a paper for real release, not just wrapping up text.
+- Writing pipeline hardening. Turn Stage 07 into a reliable manuscript production pipeline with stable conference and journal-style writing structures, bibliography handling, table and figure inclusion, and reproducible PDF compilation. The goal is a submission-grade research package, not just writing notes.
+- Review and dissemination package. Expand Stage 08 so it produces readiness checklists, threats-to-validity notes, artifact manifests, release notes, and external-facing research bundles. The final stage should feel like packaging a verifiable research release, not just wrapping up text.
 - Frontend run dashboard. Build a lightweight UI that can browse runs, stage status, summaries, logs, artifacts, and validation failures. It should read from the run directory and manifest rather than introducing a database first.
 - README and open-source assets. Keep refining the README and add `assets/` images such as workflow diagrams, UI screenshots, and artifact examples. This is important for open-source clarity, onboarding, and project presentation.
 

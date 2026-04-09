@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .utils import RunPaths
+from .utils import STAGES
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -151,7 +152,7 @@ def scan_project(project_root: Path) -> ProjectBootstrapResult:
     writing_state = _analyze_writing(files, project_root)
 
     stage_assessments = _assess_stages(code_state, experiment_state, writing_state)
-    entry_stage = _recommend_entry_stage(stage_assessments)
+    entry_stage = recommend_entry_stage(stage_assessments)
 
     return ProjectBootstrapResult(
         project_root=str(project_root),
@@ -540,7 +541,7 @@ def _assess_stages(
         s01 = StageAssessment(1, "Literature Survey", "partial", "low",
                               [f"Has .bib files but no related work section in .tex"])
     else:
-        s01 = StageAssessment(1, "Literature Survey", "not_started", "high",
+        s01 = StageAssessment(1, "Literature Survey", "not_started", "low",
                               ["No .bib files or literature review found"])
     assessments.append(s01)
 
@@ -617,31 +618,35 @@ def _assess_stages(
     return assessments
 
 
-def _recommend_entry_stage(assessments: list[StageAssessment]) -> int:
-    """Find the best re-entry stage based on assessments.
+def recommend_entry_stage(assessments: list[StageAssessment]) -> int:
+    """Pick a practical re-entry stage from bootstrap assessments.
 
-    If later stages are complete, don't recommend going back to an earlier
-    incomplete stage unless it has high confidence. The entry point is the
-    first stage that is not complete AND has no complete stages after it,
-    OR the first "partial"/"not_started" stage after the last complete one.
+    Later complete work should usually let the run re-enter downstream, but a
+    high-confidence earlier gap still pulls the entry point back to that stage.
+    This preserves useful midstream handoff while respecting explicit evidence
+    that a prerequisite stage still needs real work.
     """
-    # Find the last complete stage
+    if not assessments:
+        return 1
+
     last_complete = 0
-    for a in assessments:
-        if a.status == "complete":
-            last_complete = a.stage_number
+    for assessment in assessments:
+        if assessment.status == "complete":
+            last_complete = assessment.stage_number
 
-    # Entry point: first non-complete stage at or after the last complete stage
-    for a in assessments:
-        if a.stage_number <= last_complete:
+    for assessment in assessments:
+        if assessment.stage_number >= last_complete:
+            break
+        if assessment.status != "complete" and assessment.confidence == "high":
+            return assessment.stage_number
+
+    for assessment in assessments:
+        if assessment.stage_number <= last_complete:
             continue
-        if a.status != "complete":
-            return a.stage_number
+        if assessment.status != "complete":
+            return assessment.stage_number
 
-    # All complete — start at the last stage
-    if assessments:
-        return assessments[-1].stage_number
-    return 1
+    return assessments[-1].stage_number
 
 
 # ---------------------------------------------------------------------------
@@ -693,9 +698,24 @@ def load_recommended_entry_stage(paths: RunPaths) -> int | None:
         return None
     try:
         data = json.loads(meta_path.read_text(encoding="utf-8"))
-        return data.get("recommended_entry_stage")
+        value = data.get("recommended_entry_stage")
+        if isinstance(value, int) and any(stage.number == value for stage in STAGES):
+            return value
+        return None
     except (json.JSONDecodeError, TypeError):
         return None
+
+
+def save_recommended_entry_stage(paths: RunPaths, entry_stage: int) -> None:
+    meta_path = paths.bootstrap_dir / "scan_metadata.json"
+    payload: dict[str, object] = {}
+    if meta_path.exists():
+        try:
+            payload = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, TypeError):
+            payload = {}
+    payload["recommended_entry_stage"] = entry_stage
+    _write_json(meta_path, payload)
 
 
 def project_bootstrap_exists(paths: RunPaths) -> bool:
