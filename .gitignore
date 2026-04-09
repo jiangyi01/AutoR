@@ -1,10 +1,14 @@
 __pycache__/
 *.pyc
+.DS_Store
 runs/
 .tmp/
 AGENTS.md
 .codex
 configs/diagram_config.yaml
-docs/
+docs/*
+!docs/ui-design/
+!docs/ui-design/**
+docs/ui-design/.DS_Store
 examples/
 agentspace/
