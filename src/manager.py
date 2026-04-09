@@ -1040,6 +1040,9 @@ class ResearchManager:
                     )
 
                 stage_markdown = read_text(repair_result.stage_file_path)
+                revision_delta = extract_revision_delta(stage_markdown)
+                stage_markdown = strip_revision_delta(stage_markdown)
+                write_text(repair_result.stage_file_path, stage_markdown)
                 validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
                 if validation_errors:
                     self.ui.show_status(

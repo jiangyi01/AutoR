@@ -19,6 +19,7 @@ from src.utils import (
     build_run_paths,
     read_text,
     relative_to_run,
+    write_attempt_count,
     write_text,
 )
 
@@ -279,6 +280,103 @@ class BootstrapAdjustingSmokeOperator(ScriptedSmokeOperator):
         return super().run_stage(stage, prompt, paths, attempt_no, continue_session=continue_session)
 
 
+class RepairingRevisionDeltaOperator(ScriptedSmokeOperator):
+    def run_stage(
+        self,
+        stage,
+        prompt: str,
+        paths,
+        attempt_no: int,
+        continue_session: bool = False,
+    ) -> OperatorResult:
+        produced = self._materialize_artifacts(stage, paths, 1)
+        stage_file = paths.stage_tmp_file(stage)
+        write_text(
+            stage_file,
+            (
+                f"# Stage {stage.number:02d}: {stage.display_name}\n\n"
+                "## Revision Delta\n"
+                "- Initial invalid delta should not survive human review.\n\n"
+                "## Objective\n"
+                "Broken first draft.\n\n"
+                "## Previously Approved Stage Summaries\n"
+                "_None yet._\n\n"
+                "## What I Did\n"
+                "Wrote an incomplete draft.\n\n"
+                "## Files Produced\n"
+                + "\n".join(f"- `{path}`" for path in produced)
+                + "\n\n"
+                "## Suggestions for Refinement\n"
+                "1. a\n2. b\n3. c\n\n"
+                "## Your Options\n"
+                "1. Use suggestion 1\n"
+                "2. Use suggestion 2\n"
+                "3. Use suggestion 3\n"
+                "4. Refine with your own feedback\n"
+                "5. Approve and continue\n"
+                "6. Abort\n"
+            ),
+        )
+        return OperatorResult(
+            success=True,
+            exit_code=0,
+            stdout="invalid first draft",
+            stderr="",
+            stage_file_path=stage_file,
+            session_id=f"{stage.slug}-session-1",
+        )
+
+    def repair_stage_summary(
+        self,
+        stage,
+        original_prompt: str,
+        original_result: OperatorResult,
+        paths,
+        attempt_no: int,
+    ) -> OperatorResult:
+        produced = self._materialize_artifacts(stage, paths, 2)
+        stage_file = paths.stage_tmp_file(stage)
+        write_text(
+            stage_file,
+            (
+                f"# Stage {stage.number:02d}: {stage.display_name}\n\n"
+                "## Revision Delta\n"
+                "- Repair delta should be shown to the reviewer.\n"
+                "- Added the missing Key Results section.\n\n"
+                "## Objective\n"
+                "Produce a valid smoke-test stage summary.\n\n"
+                "## Previously Approved Stage Summaries\n"
+                "_None yet._\n\n"
+                "## What I Did\n"
+                "- Repaired the stage summary.\n\n"
+                "## Key Results\n"
+                "- The repaired draft is now valid.\n\n"
+                "## Files Produced\n"
+                + "\n".join(f"- `{path}`" for path in produced)
+                + "\n\n"
+                "## Suggestions for Refinement\n"
+                "1. Tighten scope.\n"
+                "2. Strengthen evidence.\n"
+                "3. Clarify next steps.\n\n"
+                "## Your Options\n"
+                "1. Use suggestion 1\n"
+                "2. Use suggestion 2\n"
+                "3. Use suggestion 3\n"
+                "4. Refine with your own feedback\n"
+                "5. Approve and continue\n"
+                "6. Abort\n"
+            ),
+        )
+        return OperatorResult(
+            success=True,
+            exit_code=0,
+            stdout="repaired draft",
+            stderr="",
+            stage_file_path=stage_file,
+            session_id=f"{stage.slug}-session-1",
+        )
+
+
 class ManagerSmokeTests(unittest.TestCase):
     def _run_roots(self, runs_dir: Path) -> list[Path]:
         return sorted(path for path in runs_dir.iterdir() if path.is_dir())
@@ -347,6 +445,33 @@ class ManagerSmokeTests(unittest.TestCase):
             entry = next(item for item in manifest.stages if item.slug == STAGE_01.slug)
             self.assertTrue(entry.approved)
             self.assertEqual(entry.attempt_count, 2)
+
+    def test_revision_delta_uses_repaired_draft_and_is_stripped_before_promotion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir = Path(tmp_dir) / "runs"
+            output = io.StringIO()
+            operator = RepairingRevisionDeltaOperator()
+            manager = ResearchManager(
+                project_root=REPO_ROOT,
+                runs_dir=runs_dir,
+                operator=operator,
+                output_stream=output,
+            )
+            paths = manager._create_run("Smoke-test revision delta repair handling.", venue="neurips_2025")
+            write_attempt_count(paths, STAGE_01, 1)
+
+            with patch.object(manager, "_ask_choice", return_value="5"):
+                approved = manager._run_stage(paths, STAGE_01)
+
+            self.assertTrue(approved)
+            rendered = output.getvalue()
+            self.assertIn("Repair delta should be shown", rendered)
+            self.assertNotIn("Initial invalid delta should not survive", rendered)
+
+            final_markdown = read_text(paths.stage_file(STAGE_01))
+            self.assertNotIn("## Revision Delta", final_markdown)
+            self.assertNotIn("Repair delta should be shown", final_markdown)
+            self.assertIn("## Key Results", final_markdown)
 
     def test_resume_run_with_rollback_reruns_invalidated_downstream_stages(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
