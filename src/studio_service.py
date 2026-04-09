@@ -150,6 +150,21 @@ class IterationPlan:
     branch_run_id: str | None
     reuses_current_run: bool
     summary: str
+    user_feedback: str
+    operator_brief: str
+    reviewer_actions: list[str]
+
+
+@dataclass(frozen=True)
+class StudioPaperPreview:
+    run_id: str
+    tex_relative_path: str | None
+    tex_content: str
+    section_paths: list[str]
+    pdf_relative_path: str | None
+    pdf_available: bool
+    build_log_relative_path: str | None
+    build_log_content: str
 
 
 class ProjectIndexStore:
@@ -395,6 +410,40 @@ class StudioService:
             include_hidden=include_hidden,
         )
 
+    def get_paper_preview(self, run_id: str) -> StudioPaperPreview:
+        paths = self._require_run(run_id)
+        tex_path = paths.writing_dir / "main.tex"
+        tex_content = read_text(tex_path) if tex_path.exists() else ""
+        section_paths = [
+            str(path.relative_to(paths.run_root)).replace("\\", "/")
+            for path in sorted((paths.writing_dir / "sections").rglob("*.tex"))
+        ]
+        pdf_path = self._find_paper_pdf(paths)
+        build_log_path = self._find_existing_path(
+            [
+                paths.writing_dir / "build.log",
+                paths.artifacts_dir / "build.log",
+                paths.artifacts_dir / "paper_package" / "build.log",
+            ]
+        )
+        return StudioPaperPreview(
+            run_id=run_id,
+            tex_relative_path=self._relative_to_run(paths, tex_path) if tex_path.exists() else None,
+            tex_content=tex_content,
+            section_paths=section_paths,
+            pdf_relative_path=self._relative_to_run(paths, pdf_path) if pdf_path is not None else None,
+            pdf_available=pdf_path is not None,
+            build_log_relative_path=self._relative_to_run(paths, build_log_path) if build_log_path is not None else None,
+            build_log_content=read_text(build_log_path) if build_log_path is not None else "",
+        )
+
+    def get_paper_pdf_bytes(self, run_id: str) -> bytes:
+        paths = self._require_run(run_id)
+        pdf_path = self._find_paper_pdf(paths)
+        if pdf_path is None:
+            raise FileNotFoundError(f"No manuscript PDF found for run: {run_id}")
+        return pdf_path.read_bytes()
+
     def plan_iteration(self, request: IterationRequest) -> IterationPlan:
         run = self.get_run_summary(request.run_id)
         stage = _resolve_stage(request.base_stage_slug)
@@ -434,6 +483,28 @@ class StudioService:
                 f"The current run stays unchanged."
             )
 
+        feedback_text = request.user_feedback.strip()
+        operator_brief_lines = [
+            f"Target run: {request.run_id}",
+            f"Iteration mode: {request.mode}",
+            f"Base stage: {stage.slug}",
+            f"Scope: {request.scope_type} -> {request.scope_value}",
+        ]
+        if preserved_stages:
+            operator_brief_lines.append(f"Preserve upstream approvals: {', '.join(preserved_stages)}")
+        if stale_stages:
+            operator_brief_lines.append(f"Treat downstream stages as stale: {', '.join(stale_stages)}")
+        if branch_run_id is not None:
+            operator_brief_lines.append(f"Create branch run id: {branch_run_id}")
+        operator_brief_lines.append(
+            "Human feedback: " + (feedback_text if feedback_text else "No additional human feedback yet.")
+        )
+        reviewer_actions = [
+            "Inspect the selected stage summary before resuming the run.",
+            f"Use `{request.mode}` for the scope `{request.scope_value}`.",
+            "Hand the operator brief to AutoR when execution actions are wired into the UI.",
+        ]
+
         return IterationPlan(
             run_id=request.run_id,
             base_stage_slug=stage.slug,
@@ -446,6 +517,9 @@ class StudioService:
             branch_run_id=branch_run_id,
             reuses_current_run=reuses_current_run,
             summary=summary,
+            user_feedback=feedback_text,
+            operator_brief="\n".join(operator_brief_lines),
+            reviewer_actions=reviewer_actions,
         )
 
     def _require_run(self, run_id: str) -> RunPaths:
@@ -494,6 +568,31 @@ class StudioService:
         if not path.exists():
             return {}
         return json.loads(path.read_text(encoding="utf-8"))
+
+    def _find_paper_pdf(self, paths: RunPaths) -> Path | None:
+        preferred_candidates = [
+            paths.writing_dir / "main.pdf",
+            paths.artifacts_dir / "paper.pdf",
+            paths.artifacts_dir / "paper_package" / "paper.pdf",
+        ]
+        existing = self._find_existing_path(preferred_candidates)
+        if existing is not None:
+            return existing
+
+        for root in (paths.writing_dir, paths.artifacts_dir):
+            for candidate in sorted(root.rglob("*.pdf")):
+                if candidate.is_file():
+                    return candidate
+        return None
+
+    def _find_existing_path(self, candidates: list[Path]) -> Path | None:
+        for candidate in candidates:
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        return None
+
+    def _relative_to_run(self, paths: RunPaths, path: Path) -> str:
+        return str(path.relative_to(paths.run_root)).replace("\\", "/")
 
     def _resolve_run_relative_path(self, paths: RunPaths, relative_path: str) -> Path:
         candidate = (paths.run_root / relative_path).resolve()

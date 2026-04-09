@@ -55,7 +55,9 @@ class StudioHttpTests(unittest.TestCase):
         with urlopen(request) as response:
             body = response.read().decode("utf-8")
         self.assertIn("AutoR Studio", body)
-        self.assertIn("Project Hub And Run Workspace", body)
+        self.assertIn("Research Control Workspace", body)
+        self.assertIn("Human Review", body)
+        self.assertIn("Paper Preview", body)
 
     def test_project_endpoints(self) -> None:
         created = self._request_json(
@@ -99,6 +101,21 @@ class StudioHttpTests(unittest.TestCase):
 
         artifacts = self._request_json("GET", f"/api/runs/{self.run_id}/artifacts")
         self.assertEqual(artifacts["artifact_count"], 3)
+
+    def test_paper_endpoints(self) -> None:
+        preview = self._request_json("GET", f"/api/runs/{self.run_id}/paper")
+        self.assertTrue(preview["pdf_available"])
+        self.assertEqual(preview["pdf_relative_path"], "workspace/artifacts/paper.pdf")
+        self.assertEqual(preview["tex_relative_path"], "workspace/writing/main.tex")
+        self.assertIn("workspace/writing/sections/intro.tex", preview["section_paths"])
+        self.assertIn("latexmk -pdf main.tex", preview["build_log_content"])
+
+        request = Request(self.base_url + f"/api/runs/{self.run_id}/paper/pdf", method="GET")
+        with urlopen(request) as response:
+            body = response.read()
+            content_type = response.headers.get("Content-Type")
+        self.assertEqual(content_type, "application/pdf")
+        self.assertTrue(body.startswith(b"%PDF-1.4"))
 
     def test_file_tree_and_content_endpoints(self) -> None:
         tree = self._request_json("GET", f"/api/runs/{self.run_id}/files/tree?root=workspace&depth=2")
@@ -147,6 +164,15 @@ class StudioHttpTests(unittest.TestCase):
         write_text(paths.data_dir / "dataset_manifest.json", json.dumps({"dataset": "digits"}))
         write_text(paths.results_dir / "results.json", json.dumps({"accuracy": 0.91}))
         (paths.figures_dir / "accuracy.png").write_bytes(b"\x89PNG test figure")
+        write_text(
+            paths.writing_dir / "main.tex",
+            "\\documentclass{article}\n\\begin{document}\n\\input{sections/intro}\n\\end{document}\n",
+        )
+        sections_dir = paths.writing_dir / "sections"
+        sections_dir.mkdir(parents=True, exist_ok=True)
+        write_text(sections_dir / "intro.tex", "\\section{Intro}\nStudio preview test.\n")
+        write_text(paths.writing_dir / "build.log", "latexmk -pdf main.tex\nOutput written on main.pdf\n")
+        (paths.artifacts_dir / "paper.pdf").write_bytes(b"%PDF-1.4 studio http test")
         write_artifact_index(paths)
 
         for stage in (STAGE_01, STAGE_02, STAGE_03, STAGE_04):

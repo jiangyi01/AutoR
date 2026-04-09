@@ -85,6 +85,16 @@ def build_handler(service: StudioService, static_root: Path):
                 self._write_json(HTTPStatus.OK, studio_to_dict(summary))
                 return
 
+            if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "paper":
+                preview = service.get_paper_preview(parts[2])
+                self._write_json(HTTPStatus.OK, studio_to_dict(preview))
+                return
+
+            if len(parts) == 5 and parts[:2] == ["api", "runs"] and parts[3:5] == ["paper", "pdf"]:
+                body = service.get_paper_pdf_bytes(parts[2])
+                self._write_bytes(HTTPStatus.OK, body, content_type="application/pdf")
+                return
+
             if len(parts) == 5 and parts[:2] == ["api", "runs"] and parts[3] == "stages":
                 markdown = service.get_stage_document(parts[2], parts[4])
                 self._write_json(
@@ -184,6 +194,13 @@ def build_handler(service: StudioService, static_root: Path):
 
         def _write_error(self, status: HTTPStatus, detail: str) -> None:
             self._write_json(status, {"error": detail})
+
+        def _write_bytes(self, status: HTTPStatus, body: bytes, content_type: str) -> None:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
         def _serve_static_file(self, path: Path) -> None:
             candidate = path.resolve()

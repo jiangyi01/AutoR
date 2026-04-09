@@ -20,7 +20,7 @@ The design is grounded in real repository concepts, not imaginary product object
 | `runs/<run_id>/logs.txt` and `logs_raw.jsonl` | human-readable logs and event stream | trace timeline, debug console, event inspector |
 | `runs/<run_id>/operator_state/*` | session IDs, attempts, recovery state | execution metadata drawer |
 | `runs/<run_id>/artifact_index.json` | structured data, result, and figure inventory | artifact explorer, evidence browser |
-| `runs/<run_id>/workspace/` | the actual research payload | file tree, editor, previews |
+| `runs/<run_id>/workspace/` | the actual research payload | file tree, read-only preview, external handoff |
 | `runs/<run_id>/workspace/writing/main.tex` and `main.pdf` | manuscript source and compiled output | Overleaf-style writing studio |
 | `runs/<run_id>/memory.md` and `handoff/*.md` | cross-stage memory and handoff | context panel, provenance panel |
 
@@ -237,27 +237,30 @@ The first backend-oriented slice is now implemented in the repository:
 - `tests/test_studio_service.py`
 - `tests/test_studio_http.py`
 
-This initial slice focuses on the state model required by the generated Project Hub and Run Workspace concepts:
+This initial slice now covers a first usable local studio shell:
 
 - project index storage
 - project summaries with active-run status
 - run summary loading
 - stage document loading
+- a split `Overview / Human Review / Files / Paper` browser shell
 - workspace file tree browsing
-- file content preview
-- iteration planning for continue, redo, and branch
+- read-only file content preview with improved markdown rendering
+- human iteration planning for continue, redo, and branch with generated execution briefs
+- direct manuscript preview with PDF embedding, section listing, and build-log display
 - local JSON HTTP endpoints for projects, runs, stages, files, artifacts, and iteration planning
 - a zero-dependency local UI shell that consumes those endpoints
+- a simple local launcher via `python studio.py --repo-root . --port 8765`
 
-The next logical step is to wrap this backend core with an HTTP service layer and then build the first UI shell on top of it.
+The next logical step is to wire write actions into this shell: stage approvals, reruns, branch creation, LaTeX compile, and external handoff into VS Code or Overleaf.
 
 ## Suggested Build Order
 
 1. Project Hub
-2. Run Workspace shell
-3. Stage rail plus approval controls
-4. File tree plus artifact explorer
-5. Writing Studio with PDF split view
+2. Human Review controls
+3. Read-only Files plus external handoff
+4. Writing Studio with compile actions
+5. Stage rail plus approval controls
 6. Trace inspector
 7. Version history and restore
 8. Partial iteration flows

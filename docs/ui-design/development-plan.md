@@ -50,10 +50,24 @@ Covered in the current implementation:
 - run summary loading
 - stage document access
 - workspace file tree construction
-- file content preview loading
-- iteration planning for continue, redo, and branch
+- read-only file content preview loading
+- iteration planning for continue, redo, and branch with generated execution briefs
+- manuscript preview metadata plus PDF streaming
 - a lightweight local JSON HTTP adapter for the first read-oriented UI flows
-- a lightweight local browser shell for run browsing and stage inspection
+- a lightweight local browser shell split into Overview, Human Review, Files, and Paper pages
+- improved markdown rendering for stage and note previews
+
+Current launcher options:
+
+```bash
+python studio.py --repo-root . --host 127.0.0.1 --port 8765
+```
+
+or
+
+```bash
+python -m src.studio_http --repo-root . --host 127.0.0.1 --port 8765
+```
 
 ### Backend work
 
@@ -66,17 +80,20 @@ Covered in the current implementation:
 
 ### Frontend work
 
-- basic app shell
-- project list placeholder
-- run workspace placeholder
+- multi-page app shell
+- project list
+- human review planner
+- read-only file browser
+- paper preview page
 - API client
 - event stream client
 
 ### Acceptance bar
 
 - UI can open an existing run
-- UI can show stages, files, and artifacts
-- UI can resume or rollback a run
+- UI can show stages, files, artifacts, and paper preview
+- UI can generate a clean iteration brief for human-in-the-loop refinement
+- UI can resume or rollback a run once write actions land
 
 ## Wave 1: Project Hub And Run Workspace
 

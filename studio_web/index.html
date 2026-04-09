@@ -11,7 +11,10 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">AutoR Studio</p>
-          <h1>Project Hub And Run Workspace</h1>
+          <h1>Research Control Workspace</h1>
+          <p class="topbar-copy">
+            Split the workflow into focused pages for project control, human review, read-only files, and paper preview.
+          </p>
         </div>
         <div class="topbar-actions">
           <span id="connection-status" class="badge">Connecting</span>
@@ -19,8 +22,8 @@
         </div>
       </header>
 
-      <main class="layout">
-        <aside class="sidebar-stack">
+      <main class="shell-grid">
+        <aside class="control-column">
           <section class="panel sidebar">
             <div class="panel-header">
               <h2>Projects</h2>
@@ -71,87 +74,257 @@
           </section>
         </aside>
 
-        <section class="workspace">
-          <div class="workspace-grid">
-            <nav class="panel stages-panel">
-              <div class="panel-header">
-                <div>
-                  <p id="active-project-label" class="eyebrow">No project selected</p>
-                  <h2>Stages</h2>
-                </div>
-                <span id="run-status" class="meta">Idle</span>
+        <section class="workspace-column">
+          <section class="panel workspace-header">
+            <div class="workspace-header-body">
+              <div class="workspace-title">
+                <p id="active-project-label" class="eyebrow">No project selected</p>
+                <h2 id="run-title">No run selected</h2>
+                <p id="run-goal" class="workspace-goal">Select a run to inspect stage output, files, and manuscript artifacts.</p>
               </div>
-              <div id="stage-rail" class="stage-rail"></div>
+              <div class="workspace-actions">
+                <span id="run-status" class="badge badge-status">Idle</span>
+              </div>
+            </div>
+            <nav class="page-nav" aria-label="Studio pages">
+              <button class="page-link is-active" data-page="overview" type="button">Overview</button>
+              <button class="page-link" data-page="review" type="button">Human Review</button>
+              <button class="page-link" data-page="files" type="button">Files</button>
+              <button class="page-link" data-page="paper" type="button">Paper</button>
             </nav>
+          </section>
 
-            <section class="panel document-panel">
-              <div class="panel-header">
-                <div>
-                  <p id="run-title" class="eyebrow">No run selected</p>
-                  <h2 id="document-title">Workspace Preview</h2>
+          <section id="page-overview" class="page is-active">
+            <div class="page-grid overview-grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <h2>Stage Rail</h2>
+                  <span id="stage-count" class="meta">0</span>
                 </div>
-                <span id="document-meta" class="meta"></span>
-              </div>
-              <article id="stage-document" class="document-body empty-state">
-                Select a project or run to inspect stage summaries and workspace files.
-              </article>
-            </section>
-
-            <aside class="panel inspector-panel">
-              <div class="panel-header">
-                <h2>Inspector</h2>
-                <span id="artifact-total" class="meta">0 artifacts</span>
-              </div>
-
-              <section class="inspector-block">
-                <h3>Run Summary</h3>
-                <dl id="run-summary" class="summary-list"></dl>
+                <div class="panel-body">
+                  <div id="stage-rail" class="stage-rail"></div>
+                </div>
               </section>
 
-              <section class="inspector-block">
-                <h3>Artifacts</h3>
-                <ul id="artifact-summary" class="artifact-summary"></ul>
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Current focus</p>
+                    <h2 id="overview-stage-title">Stage snapshot</h2>
+                  </div>
+                  <span id="overview-stage-meta" class="meta"></span>
+                </div>
+                <div class="panel-body">
+                  <article id="overview-stage-summary" class="document-body empty-state">
+                    Select a stage to inspect the current summary.
+                  </article>
+                </div>
               </section>
 
-              <section class="inspector-block">
-                <h3>Iteration Planner</h3>
-                <form id="iteration-form" class="iteration-form">
-                  <label>
-                    <span>Mode</span>
-                    <select id="iteration-mode" name="mode">
-                      <option value="continue">Continue</option>
-                      <option value="redo">Redo</option>
-                      <option value="branch">Branch</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Stage</span>
-                    <select id="iteration-stage" name="base_stage_slug"></select>
-                  </label>
-                  <label>
-                    <span>Scope type</span>
-                    <select id="iteration-scope-type" name="scope_type">
-                      <option value="stage">Stage</option>
-                      <option value="file">File</option>
-                      <option value="subtree">Subtree</option>
-                      <option value="manuscript">Manuscript</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Scope value</span>
-                    <input id="iteration-scope-value" name="scope_value" type="text" placeholder="workspace/writing/sections/method.tex" />
-                  </label>
-                  <button class="button button-primary" type="submit">Plan Iteration</button>
-                </form>
-                <div id="iteration-plan" class="plan-output empty-state">No iteration plan generated yet.</div>
+              <section class="panel">
+                <div class="panel-header">
+                  <h2>Run Summary</h2>
+                  <span id="artifact-total" class="meta">0 artifacts</span>
+                </div>
+                <div class="panel-body split-stack">
+                  <dl id="run-summary" class="summary-list"></dl>
+                  <section class="inspector-block">
+                    <h3>Artifacts</h3>
+                    <ul id="artifact-summary" class="artifact-summary"></ul>
+                  </section>
+                </div>
               </section>
 
-              <section class="inspector-block">
-                <h3>Workspace Tree</h3>
-                <div id="file-tree" class="file-tree"></div>
+              <section class="panel">
+                <div class="panel-header">
+                  <h2>Project Thesis</h2>
+                  <span id="project-meta" class="meta">No project</span>
+                </div>
+                <div class="panel-body">
+                  <div id="project-brief" class="copy-block empty-state">
+                    Project context appears here after you select a project.
+                  </div>
+                </div>
               </section>
-            </aside>
-          </div>
+            </div>
+          </section>
+
+          <section id="page-review" class="page">
+            <div class="page-grid review-grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p id="review-stage-label" class="eyebrow">Human Review</p>
+                    <h2 id="document-title">Stage document</h2>
+                  </div>
+                  <span id="document-meta" class="meta"></span>
+                </div>
+                <div class="panel-body">
+                  <article id="stage-document" class="document-body empty-state">
+                    Select a stage to inspect the human-readable summary.
+                  </article>
+                </div>
+              </section>
+
+              <aside class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Read-only loop</p>
+                    <h2>Human Iteration</h2>
+                  </div>
+                  <span class="meta">Plan now, execute later</span>
+                </div>
+                <div class="panel-body split-stack">
+                  <div class="banner">
+                    Review the stage output, write focused feedback, and generate a clean execution brief for the next AutoR iteration.
+                  </div>
+
+                  <form id="iteration-form" class="iteration-form">
+                    <label>
+                      <span>Mode</span>
+                      <select id="iteration-mode" name="mode">
+                        <option value="continue">Continue</option>
+                        <option value="redo">Redo</option>
+                        <option value="branch">Branch</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Stage</span>
+                      <select id="iteration-stage" name="base_stage_slug"></select>
+                    </label>
+                    <label>
+                      <span>Scope type</span>
+                      <select id="iteration-scope-type" name="scope_type">
+                        <option value="stage">Stage</option>
+                        <option value="file">File</option>
+                        <option value="subtree">Subtree</option>
+                        <option value="manuscript">Manuscript</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Scope value</span>
+                      <input
+                        id="iteration-scope-value"
+                        name="scope_value"
+                        type="text"
+                        placeholder="workspace/writing/sections/method.tex"
+                      />
+                    </label>
+                    <label>
+                      <span>Human feedback</span>
+                      <textarea
+                        id="iteration-feedback"
+                        name="user_feedback"
+                        rows="5"
+                        placeholder="Tighten the claims, keep the previous experiment results, and revise the writing narrative."
+                      ></textarea>
+                    </label>
+                    <button class="button button-primary" type="submit">Generate Execution Brief</button>
+                  </form>
+
+                  <section class="inspector-block">
+                    <h3>Reviewer Checklist</h3>
+                    <ul id="reviewer-actions" class="artifact-summary">
+                      <li>Pick a run and stage.</li>
+                      <li>Review the stage summary and artifacts.</li>
+                      <li>Generate an execution brief for the next iteration.</li>
+                    </ul>
+                  </section>
+
+                  <section class="inspector-block">
+                    <h3>Execution Brief</h3>
+                    <div id="iteration-plan" class="plan-output empty-state">No iteration brief generated yet.</div>
+                  </section>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <section id="page-files" class="page">
+            <div class="page-grid files-grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Workspace browser</p>
+                    <h2>Read-only Files</h2>
+                  </div>
+                  <span class="meta">Editing stays outside the browser for now</span>
+                </div>
+                <div class="panel-body split-stack">
+                  <div class="banner subtle">
+                    File editing is intentionally disabled in this first slice. The next integration step is handing files off to VS Code or Overleaf.
+                  </div>
+                  <div id="file-tree" class="file-tree"></div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Inspector</p>
+                    <h2 id="file-preview-title">File preview</h2>
+                  </div>
+                  <span id="file-preview-meta" class="meta"></span>
+                </div>
+                <div class="panel-body split-stack">
+                  <div class="pill-row">
+                    <span class="pill">Planned: VS Code handoff</span>
+                    <span class="pill">Planned: Overleaf handoff</span>
+                  </div>
+                  <div id="file-preview" class="document-body empty-state">
+                    Select a file from the workspace tree to preview it here.
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section id="page-paper" class="page">
+            <div class="page-grid paper-grid">
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Writing studio</p>
+                    <h2>Paper Preview</h2>
+                  </div>
+                  <span id="paper-status" class="meta">No PDF yet</span>
+                </div>
+                <div class="panel-body split-stack">
+                  <div class="banner subtle">
+                    This page is preview-first: manuscript source, compiled PDF, and build log in one place. Editing and compile actions come next.
+                  </div>
+                  <div id="paper-frame-container" class="paper-frame-container empty-state">
+                    Select a run with writing artifacts to preview the paper.
+                  </div>
+                </div>
+              </section>
+
+              <aside class="panel">
+                <div class="panel-header">
+                  <h2>Manuscript Sources</h2>
+                  <span id="paper-meta" class="meta"></span>
+                </div>
+                <div class="panel-body split-stack">
+                  <dl id="paper-summary" class="summary-list"></dl>
+
+                  <section class="inspector-block">
+                    <h3>Sections</h3>
+                    <ul id="paper-sections" class="artifact-summary"></ul>
+                  </section>
+
+                  <section class="inspector-block">
+                    <h3>Main TeX</h3>
+                    <div id="paper-tex-preview" class="document-body empty-state">No manuscript source found.</div>
+                  </section>
+
+                  <section class="inspector-block">
+                    <h3>Build log</h3>
+                    <div id="paper-build-log" class="document-body empty-state">No build log found.</div>
+                  </section>
+                </div>
+              </aside>
+            </div>
+          </section>
         </section>
       </main>
     </div>

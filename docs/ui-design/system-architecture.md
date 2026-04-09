@@ -78,13 +78,21 @@ The foundation currently stabilizes:
 - run summary loading from manifests and configs
 - stage document access
 - workspace file tree generation
-- file content access for preview panes
-- iteration planning for `continue`, `redo`, and `branch`
+- read-only file content access for preview panes
+- iteration planning for `continue`, `redo`, and `branch` with generated operator briefs
+- manuscript preview metadata and direct PDF streaming
 - local JSON endpoints over the backend core
+- a split local shell for Overview, Human Review, Files, and Paper
 
 This keeps the implementation dependency-light while establishing the state model and transport surface required by the UI.
 
 ### Current launch command
+
+```bash
+python studio.py --repo-root . --host 127.0.0.1 --port 8765
+```
+
+or
 
 ```bash
 python -m src.studio_http --repo-root . --host 127.0.0.1 --port 8765
@@ -106,6 +114,8 @@ http://127.0.0.1:8765/studio/
 - `POST /api/projects/{project_id}/runs`
 - `GET /api/runs`
 - `GET /api/runs/{run_id}`
+- `GET /api/runs/{run_id}/paper`
+- `GET /api/runs/{run_id}/paper/pdf`
 - `GET /api/runs/{run_id}/stages/{stage_slug}`
 - `GET /api/runs/{run_id}/files/tree`
 - `GET /api/runs/{run_id}/files/content`
@@ -281,7 +291,8 @@ Reason:
 | `GET` | `/api/runs/{run_id}/files/tree` | file tree |
 | `GET` | `/api/runs/{run_id}/files/content` | source content |
 | `GET` | `/api/runs/{run_id}/artifacts` | artifact index |
-| `GET` | `/api/runs/{run_id}/preview` | PDF, image, or rendered markdown preview |
+| `GET` | `/api/runs/{run_id}/paper` | manuscript preview metadata |
+| `GET` | `/api/runs/{run_id}/paper/pdf` | compiled PDF stream |
 
 ### Writing endpoints
 

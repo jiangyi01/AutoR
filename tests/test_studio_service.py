@@ -92,6 +92,18 @@ class StudioServiceTest(unittest.TestCase):
         self.assertIn("# Stage 01: Literature Survey", markdown)
         self.assertIn("## Key Results", markdown)
 
+    def test_get_paper_preview_returns_pdf_and_manuscript_sources(self) -> None:
+        preview = self.service.get_paper_preview(self.writing_run_id)
+
+        self.assertEqual(preview.run_id, self.writing_run_id)
+        self.assertTrue(preview.pdf_available)
+        self.assertEqual(preview.pdf_relative_path, "workspace/artifacts/paper.pdf")
+        self.assertEqual(preview.tex_relative_path, "workspace/writing/main.tex")
+        self.assertIn("\\input{sections/method}", preview.tex_content)
+        self.assertIn("workspace/writing/sections/method.tex", preview.section_paths)
+        self.assertEqual(preview.build_log_relative_path, "workspace/writing/build.log")
+        self.assertIn("latexmk -pdf main.tex", preview.build_log_content)
+
     def test_build_file_tree_lists_workspace_files(self) -> None:
         tree = self.service.build_file_tree(self.review_run_id)
         rel_paths = _collect_tree_paths(tree)
@@ -119,6 +131,8 @@ class StudioServiceTest(unittest.TestCase):
         self.assertEqual(plan.stale_stages, [STAGE_04.slug, STAGE_05.slug])
         self.assertTrue(plan.reuses_current_run)
         self.assertIsNone(plan.branch_run_id)
+        self.assertIn("Treat downstream stages as stale", plan.operator_brief)
+        self.assertEqual(plan.reviewer_actions[0], "Inspect the selected stage summary before resuming the run.")
 
     def test_plan_iteration_branch_proposes_new_run_lineage(self) -> None:
         plan = self.service.plan_iteration(
@@ -128,6 +142,7 @@ class StudioServiceTest(unittest.TestCase):
                 scope_type="file",
                 scope_value="workspace/writing/sections/method.tex",
                 mode="branch",
+                user_feedback="Revise the method framing before packaging the paper.",
             )
         )
 
@@ -136,6 +151,8 @@ class StudioServiceTest(unittest.TestCase):
         self.assertEqual(plan.branch_run_id, f"{self.writing_run_id}-branch-{STAGE_07.slug}")
         self.assertFalse(plan.reuses_current_run)
         self.assertEqual(plan.stale_stages, [])
+        self.assertIn("Revise the method framing", plan.user_feedback)
+        self.assertIn("Create branch run id", plan.operator_brief)
 
     def _create_review_run(self, run_id: str) -> str:
         run_root = self.runs_dir / run_id
@@ -171,9 +188,11 @@ class StudioServiceTest(unittest.TestCase):
         write_text(paths.user_input, "Evaluate a writing branch run.")
 
         write_text(paths.writing_dir / "main.tex", "\\documentclass{article}\n\\begin{document}\n\\input{sections/method}\n\\end{document}\n")
+        write_text(paths.writing_dir / "build.log", "latexmk -pdf main.tex\nOutput written on main.pdf\n")
         sections_dir = paths.writing_dir / "sections"
         sections_dir.mkdir(parents=True, exist_ok=True)
         write_text(sections_dir / "method.tex", "\\section{Method}\nThe operator loop.\n")
+        (paths.artifacts_dir / "paper.pdf").write_bytes(b"%PDF-1.4 writing test")
 
         for stage in STAGES:
             if stage.number > 7:
