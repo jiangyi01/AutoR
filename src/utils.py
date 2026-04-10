@@ -105,6 +105,7 @@ REQUIRED_STAGE_HEADINGS = [
     "What I Did",
     "Key Results",
     "Files Produced",
+    "Decision Ledger",
     "Suggestions for Refinement",
     "Your Options",
 ]
@@ -395,6 +396,11 @@ def required_stage_output_template(stage: StageSpec) -> str:
         "[Present the main results, findings, conclusions, or concrete outputs for this stage.]\n\n"
         "## Files Produced\n"
         "- `[relative/path]` - [what it contains]\n\n"
+        "## Decision Ledger\n"
+        "- **Open Questions**: [unresolved questions to carry forward to later stages]\n"
+        "- **Locked Decisions**: [design or method decisions made in this stage, with rationale]\n"
+        "- **Assumptions**: [accepted assumptions that downstream stages must respect]\n"
+        "- **Rejected Alternatives**: [what was considered and why it was dropped]\n\n"
         "## Suggestions for Refinement\n"
         "1. [Suggestion 1]\n"
         "2. [Suggestion 2]\n"
@@ -550,6 +556,15 @@ def extract_markdown_section(markdown: str, heading: str) -> str | None:
     return match.group(1).strip()
 
 
+def strip_markdown_section(markdown: str, heading: str) -> str:
+    pattern = re.compile(
+        rf"^## {re.escape(heading)}\s*$\n?(.*?)(?=^## |\Z)",
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    stripped = pattern.sub("", markdown)
+    return re.sub(r"\n{3,}", "\n\n", stripped).strip()
+
+
 def parse_numbered_list(section_text: str) -> dict[int, str]:
     items: dict[int, str] = {}
     current_id: int | None = None
@@ -668,6 +683,18 @@ def validate_stage_markdown(
                         "Section 'Files Produced' references missing file(s): "
                         + ", ".join(f"`{path}`" for path in missing_files)
                     )
+        elif heading == "Decision Ledger":
+            required_markers = [
+                "**Open Questions**",
+                "**Locked Decisions**",
+                "**Assumptions**",
+                "**Rejected Alternatives**",
+            ]
+            if any(marker not in section for marker in required_markers):
+                problems.append(
+                    "Section 'Decision Ledger' must include Open Questions, Locked Decisions, "
+                    "Assumptions, and Rejected Alternatives."
+                )
 
     options_section = extract_markdown_section(markdown, "Your Options")
     if options_section is not None:
@@ -974,18 +1001,22 @@ def write_stage_handoff(paths: RunPaths, stage: StageSpec, stage_markdown: str) 
     objective = extract_markdown_section(stage_markdown, "Objective") or "Not provided."
     key_results = extract_markdown_section(stage_markdown, "Key Results") or "Not provided."
     files_produced = extract_markdown_section(stage_markdown, "Files Produced") or "Not provided."
-    write_text(
-        handoff_path,
-        (
-            f"# Handoff: {stage.stage_title}\n\n"
-            "## Objective\n"
-            f"{objective}\n\n"
-            "## Key Results\n"
-            f"{key_results}\n\n"
-            "## Files Produced\n"
-            f"{files_produced}\n"
-        ),
-    )
+    decision_ledger = extract_markdown_section(stage_markdown, "Decision Ledger")
+    parts = [
+        f"# Handoff: {stage.stage_title}\n\n"
+        "## Objective\n"
+        f"{objective}\n\n"
+        "## Key Results\n"
+        f"{key_results}\n\n"
+        "## Files Produced\n"
+        f"{files_produced}\n",
+    ]
+    if decision_ledger:
+        parts.append(
+            "\n## Decision Ledger\n"
+            f"{decision_ledger}\n"
+        )
+    write_text(handoff_path, "".join(parts))
     return handoff_path
 
 
@@ -994,8 +1025,36 @@ def build_handoff_context(paths: RunPaths, upto_stage: StageSpec | None = None, 
     if upto_stage is not None:
         handoffs = [path for path in handoffs if path.stem < upto_stage.slug]
     handoffs = handoffs[-max_stages:]
-    parts = [read_text(path).strip() for path in handoffs if path.exists()]
+    parts = [
+        strip_markdown_section(read_text(path).strip(), "Decision Ledger")
+        for path in handoffs
+        if path.exists()
+    ]
     return "\n\n".join(parts).strip() or "No stage handoff summaries available yet."
+
+
+def build_decision_ledger_context(paths: RunPaths, upto_stage: StageSpec | None = None) -> str | None:
+    """Collect Decision Ledger sections from all approved handoff files."""
+    handoffs = sorted(path for path in paths.handoff_dir.glob("*.md") if path.is_file())
+    if upto_stage is not None:
+        handoffs = [path for path in handoffs if path.stem < upto_stage.slug]
+
+    entries: list[str] = []
+    for handoff_path in handoffs:
+        content = read_text(handoff_path)
+        ledger = extract_markdown_section(content, "Decision Ledger")
+        if ledger:
+            # Extract stage name from the handoff heading
+            stage_name = handoff_path.stem.replace("_", " ").title()
+            for line in content.splitlines():
+                if line.startswith("# Handoff:"):
+                    stage_name = line.removeprefix("# Handoff:").strip()
+                    break
+            entries.append(f"### {stage_name}\n{ledger}")
+
+    if not entries:
+        return None
+    return "\n\n".join(entries)
 
 
 def _extract_path_references(text: str) -> list[str]:

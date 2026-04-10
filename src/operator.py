@@ -230,6 +230,7 @@ Required markdown structure:
 ## What I Did
 ## Key Results
 ## Files Produced
+## Decision Ledger
 ## Suggestions for Refinement
 1. {DEFAULT_REFINEMENT_SUGGESTIONS[0]}
 2. {DEFAULT_REFINEMENT_SUGGESTIONS[1]}
@@ -628,6 +629,11 @@ Original stderr:
                 f"- `{relative_to_run(intro_path, paths.run_root)}`\n"
                 f"- `{relative_to_run(note_path, paths.run_root)}`\n"
                 f"- `{relative_to_run(stage_tmp_path, paths.run_root)}`\n\n"
+                "## Decision Ledger\n"
+                "- **Open Questions**: Which real research goal should be used for the first live run?\n"
+                "- **Locked Decisions**: Keep the smoke test in fake mode so the demo stays deterministic.\n"
+                "- **Assumptions**: The current terminal UI and approval loop are the main things being demonstrated.\n"
+                "- **Rejected Alternatives**: Treating the smoke test as a real research result.\n\n"
                 "## Suggestions for Refinement\n"
                 "1. Switch from fake mode to the real Claude operator and record a live stage execution.\n"
                 "2. Tune the terminal theme, colors, and screen layout for recording aesthetics.\n"
@@ -659,6 +665,11 @@ Original stderr:
                 "## Files Produced\n"
                 f"- `{relative_to_run(note_path, paths.run_root)}`\n"
                 f"- `{relative_to_run(stage_tmp_path, paths.run_root)}`\n\n"
+                "## Decision Ledger\n"
+                f"- **Open Questions**: What real evidence should replace the fake output for {stage.display_name}?\n"
+                f"- **Locked Decisions**: Keep `{stage.slug}` inside the current run layout and approval contract.\n"
+                "- **Assumptions**: This smoke run is only validating workflow mechanics.\n"
+                "- **Rejected Alternatives**: Treating placeholder artifacts as real research deliverables.\n\n"
                 "## Suggestions for Refinement\n"
                 "1. Replace fake mode with the real Claude operator and inspect the resulting artifacts.\n"
                 "2. Tighten the stage prompt to better reflect the target of actual publication-grade work.\n"

@@ -68,6 +68,7 @@ from .utils import (
     approved_stage_numbers,
     approved_stage_summaries,
     append_log_entry,
+    build_decision_ledger_context,
     build_handoff_context,
     build_continuation_prompt,
     build_prompt,
@@ -1343,6 +1344,18 @@ class ResearchManager:
                 stage_template.rstrip()
                 + "\n\n# Researcher Profile (from paper corpus bootstrap)\n\n"
                 + profile_text
+                + "\n"
+            )
+
+        # Inject accumulated decision ledger from prior stages
+        ledger_context = build_decision_ledger_context(paths, upto_stage=stage)
+        if ledger_context and stage.number >= 2:
+            stage_template = (
+                stage_template.rstrip()
+                + "\n\n# Decision Ledger (from prior stages)\n\n"
+                "The following decisions, assumptions, and open questions were recorded in earlier stages. "
+                "Respect locked decisions and accepted assumptions. Address open questions when relevant.\n\n"
+                + ledger_context
                 + "\n"
             )
 
