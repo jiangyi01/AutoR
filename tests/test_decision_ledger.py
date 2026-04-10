@@ -18,15 +18,16 @@ from pathlib import Path
 from src.utils import (
     STAGES,
     build_decision_ledger_context,
+    build_handoff_context,
     build_run_paths,
     create_run_root,
     ensure_run_layout,
-    extract_markdown_section,
     initialize_memory,
     initialize_run_config,
     read_text,
     render_approved_stage_entry,
     required_stage_output_template,
+    validate_stage_markdown,
     write_stage_handoff,
     write_text,
 )
@@ -120,11 +121,11 @@ class TestOutputTemplateIncludesLedger(unittest.TestCase):
 
 
 class TestRenderApprovedStageEntry(unittest.TestCase):
-    def test_includes_decision_ledger_when_present(self):
+    def test_keeps_approved_memory_compact_when_ledger_present(self):
         entry = render_approved_stage_entry(STAGES[0], SAMPLE_STAGE_MARKDOWN)
-        self.assertIn("Decision Ledger", entry)
-        self.assertIn("transformer-based approaches", entry)
-        self.assertIn("Training data is i.i.d.", entry)
+        self.assertNotIn("Decision Ledger", entry)
+        self.assertIn("Read 20 papers", entry)
+        self.assertIn("Found 3 key gaps", entry)
 
     def test_omits_decision_ledger_when_absent(self):
         entry = render_approved_stage_entry(STAGES[1], SAMPLE_STAGE_MARKDOWN_NO_LEDGER)
@@ -155,6 +156,12 @@ class TestWriteStageHandoff(unittest.TestCase):
         handoff_path = write_stage_handoff(self.paths, STAGES[1], SAMPLE_STAGE_MARKDOWN_NO_LEDGER)
         content = read_text(handoff_path)
         self.assertNotIn("Decision Ledger", content)
+
+    def test_handoff_context_strips_ledger_to_avoid_prompt_duplication(self):
+        write_stage_handoff(self.paths, STAGES[0], SAMPLE_STAGE_MARKDOWN)
+        handoff_context = build_handoff_context(self.paths, upto_stage=STAGES[1])
+        self.assertIn("Handoff: Stage 01: Literature Survey", handoff_context)
+        self.assertNotIn("Decision Ledger", handoff_context)
 
 
 class TestBuildDecisionLedgerContext(unittest.TestCase):
@@ -255,6 +262,44 @@ class TestStagePromptIncludesLedger(unittest.TestCase):
         self.assertIn("Decision Ledger (from prior stages)", prompt)
         self.assertIn("transformer-based approaches", prompt)
         self.assertIn("Respect locked decisions", prompt)
+
+
+class TestDecisionLedgerValidation(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.runs_dir = Path(self.tmp) / "runs"
+        self.runs_dir.mkdir()
+        self.run_root = create_run_root(self.runs_dir)
+        self.paths = build_run_paths(self.run_root)
+        ensure_run_layout(self.paths)
+        note_path = self.paths.notes_dir / "survey.md"
+        write_text(note_path, "survey note")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_validation_requires_decision_ledger_section(self):
+        problems = validate_stage_markdown(
+            SAMPLE_STAGE_MARKDOWN_NO_LEDGER.replace(
+                "# Stage 02: Hypothesis Generation",
+                "# Stage 01: Literature Survey",
+            ),
+            stage=STAGES[0],
+            paths=self.paths,
+        )
+        self.assertTrue(any("Missing required section: Decision Ledger" in problem for problem in problems))
+
+    def test_validation_requires_structured_decision_ledger_markers(self):
+        malformed = SAMPLE_STAGE_MARKDOWN.replace(
+            "## Decision Ledger\n"
+            "- **Open Questions**: Can method X scale to large datasets?\n"
+            "- **Locked Decisions**: Focus on transformer-based approaches (rationale: best performance on benchmarks)\n"
+            "- **Assumptions**: Training data is i.i.d.\n"
+            "- **Rejected Alternatives**: RNN-based methods (too slow for target scale)\n\n",
+            "## Decision Ledger\nFree-form notes only.\n\n",
+        )
+        problems = validate_stage_markdown(malformed, stage=STAGES[0], paths=self.paths)
+        self.assertTrue(any("Decision Ledger" in problem for problem in problems))
 
 
 if __name__ == "__main__":
