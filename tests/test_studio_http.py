@@ -5,7 +5,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 from src.artifact_index import write_artifact_index
 from src.manifest import initialize_run_manifest, mark_stage_approved_manifest, mark_stage_human_review_manifest
@@ -39,6 +39,7 @@ class StudioHttpTests(unittest.TestCase):
         self.thread.start()
         host, port = self.server.server_address
         self.base_url = f"http://{host}:{port}"
+        self._opener = build_opener(ProxyHandler({}))
 
     def tearDown(self) -> None:
         self.server.shutdown()
@@ -52,7 +53,7 @@ class StudioHttpTests(unittest.TestCase):
 
     def test_studio_shell_serves_index_html(self) -> None:
         request = Request(self.base_url + "/studio/", method="GET")
-        with urlopen(request) as response:
+        with self._opener.open(request) as response:
             body = response.read().decode("utf-8")
         self.assertIn("AutoR Studio", body)
         self.assertIn("Research Control Workspace", body)
@@ -119,7 +120,7 @@ class StudioHttpTests(unittest.TestCase):
         self.assertIn("latexmk -pdf main.tex", preview["build_log_content"])
 
         request = Request(self.base_url + f"/api/runs/{self.run_id}/paper/pdf", method="GET")
-        with urlopen(request) as response:
+        with self._opener.open(request) as response:
             body = response.read()
             content_type = response.headers.get("Content-Type")
         self.assertEqual(content_type, "application/pdf")
@@ -158,7 +159,7 @@ class StudioHttpTests(unittest.TestCase):
             data = json.dumps(payload).encode("utf-8")
             headers["Content-Type"] = "application/json"
         request = Request(self.base_url + path, data=data, headers=headers, method=method)
-        with urlopen(request) as response:
+        with self._opener.open(request) as response:
             return json.loads(response.read().decode("utf-8"))
 
     def _create_run(self, run_id: str) -> str:
