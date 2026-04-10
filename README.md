@@ -260,6 +260,38 @@ If `--venue` is omitted, AutoR defaults to `neurips_2025`.
 
 Valid stage identifiers include `03`, `3`, and `03_study_design`.
 
+### Studio (browser UI)
+
+AutoR Studio is a local web UI that drives the same real Claude-backed pipeline through a browser instead of a terminal. Human-in-the-loop approval, feedback, stage re-runs, live session traces, and the compiled paper all live in one page.
+
+```bash
+# Start the Studio server (default: http://127.0.0.1:8000)
+python studio.py
+
+# Then open the UI in your browser:
+#   http://127.0.0.1:8000/studio/
+```
+
+Options:
+
+```bash
+python studio.py --port 8765                    # custom port
+python studio.py --host 0.0.0.0 --port 8000     # bind externally
+python studio.py --runs-dir /path/to/runs       # override runs directory
+```
+
+What you can do in the Studio:
+
+- **Create a project** from the hub — fill in the title + thesis, click **Create Project**, and a real Claude-backed run starts immediately
+- **Watch stages run live** on the Overview page — horizontal 8-pill stage strip, pulsing current stage, live session trace streaming real Claude tool calls from `logs_raw.jsonl`
+- **Review & Approve** — the Review page shows a "You are reviewing" hero card with a TL;DR extracted from the stage markdown, a Files Produced pill list, and an `✅ Approve → Advance to <next stage>` button
+- **Send Feedback & Re-run** — feedback is woven into the **first attempt's prompt** of the next run (not wasted on an intermediate Claude call). Works on `human_review` AND `failed` stages
+- **Resume across restarts** — if you stop the server and come back, clicking Approve/Feedback lazy-resumes the existing on-disk run without re-running stages that already have a draft
+- **Paper preview** — the Paper tab renders the compiled PDF, the LaTeX sources, and the build log
+- **Versions page** — the full checkpoint/attempt timeline for every stage
+
+The Studio requires the **Claude CLI** (`claude` on `PATH`) since every run is a real Claude-driven pipeline. If `claude` isn't installed, the server fails fast at startup with a clear error.
+
 ## ⚙️ How It Works
 
 AutoR uses an optional intake step followed by a fixed 8-stage pipeline:
