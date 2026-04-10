@@ -10,6 +10,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_REGISTRY_PATH = REPO_ROOT / "templates" / "registry.yaml"
 DEFAULT_VENUE = "neurips_2025"
+MAX_STAGE_ATTEMPTS = 5
 
 
 @dataclass(frozen=True)
@@ -465,6 +466,8 @@ def build_continuation_prompt(
     handoff_context: str,
     revision_feedback: str | None,
     intake_context_text: str | None = None,
+    attempt_no: int = 1,
+    previous_validation_errors: list[str] | None = None,
 ) -> str:
     current_draft = paths.stage_tmp_file(stage)
     current_final = paths.stage_file(stage)
@@ -509,6 +512,19 @@ def build_continuation_prompt(
         sections.extend([
             "# Intake Context (User-Provided Resources and Clarifications)",
             intake_context_text.strip(),
+        ])
+    if attempt_no >= 3 and previous_validation_errors:
+        error_list = "\n".join(f"- {e}" for e in previous_validation_errors)
+        sections.extend([
+            "# Recovery Context",
+            (
+                f"This is attempt {attempt_no}. The following validation errors have persisted "
+                f"from the previous attempt:\n{error_list}\n\n"
+                "If you believe these errors cannot be resolved within the current stage "
+                "(e.g. missing external files, impossible constraints), state that clearly "
+                "in your stage summary under ## What I Did so the human reviewer can decide "
+                "how to proceed."
+            ),
         ])
     sections.extend([
         "# Stage Handoff Context",
