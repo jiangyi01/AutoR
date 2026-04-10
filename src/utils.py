@@ -1009,14 +1009,36 @@ def _extract_path_references(text: str) -> list[str]:
 
 
 def _listed_file_exists(run_root: Path, listed_path: str) -> bool:
+    """Check whether a file referenced in a stage's "Files Produced" section
+    actually exists on disk.
+
+    Stages may legitimately reference files using either of two relative
+    base paths:
+
+    1. **Run-root-relative** — e.g. ``workspace/code/run_ablation.py``. This
+       is the canonical form the rest of AutoR uses internally.
+    2. **Workspace-relative** — e.g. ``code/run_ablation.py``. This is the
+       natural form an LLM (or a human) reaches for when describing files
+       inside the workspace, since the project's "current directory" while
+       the stage runs is effectively ``workspace/``.
+
+    We accept both. Absolute paths are honored as-is. Adding the
+    workspace-relative fallback is strictly additive — every path that
+    validated before still validates — so existing CLI runs are not
+    affected.
+    """
     candidate = Path(listed_path)
-    if not candidate.is_absolute():
-        candidate = run_root / candidate
-    try:
-        candidate.resolve().relative_to(run_root.resolve())
-    except ValueError:
+    if candidate.is_absolute():
         return candidate.exists()
-    return candidate.exists()
+    # 1. Run-root-relative (canonical AutoR form)
+    via_root = run_root / candidate
+    if via_root.exists():
+        return True
+    # 2. Workspace-relative fallback
+    via_workspace = run_root / "workspace" / candidate
+    if via_workspace.exists():
+        return True
+    return False
 
 
 def _existing_files(directory: Path) -> list[Path]:

@@ -391,18 +391,16 @@ class StudioRunner:
             return
 
         if action == "4":
-            # FEEDBACK: re-run the current stage through ResearchManager.
-            # The standard _run_stage path will call _build_stage_prompt with
-            # the revision_feedback we expose via _StudioTerminalUI's
-            # read_multiline_feedback override. To get there, the manifest's
-            # state needs to allow the manager to re-run; we mark it back to
-            # pending so resume_run starts at this stage and _run_stage takes
-            # over from scratch (with feedback).
+            # FEEDBACK: re-run the current stage with the user's feedback in
+            # the FIRST attempt's prompt (not the second). We do this by
+            # writing the feedback to a "pending feedback" file that
+            # ResearchManager._run_stage picks up at the top of its loop. If
+            # the file doesn't exist (CLI runs), behavior is unchanged.
+            paths.operator_state_dir.mkdir(parents=True, exist_ok=True)
+            pending_path = paths.operator_state_dir / f"{gate_stage_spec.slug}.pending_feedback.txt"
+            pending_path.write_text(control.feedback or "Please revise this stage.", encoding="utf-8")
+
             ui = _StudioTerminalUI(control=control)
-            # Pre-load the feedback into the UI so the next choose_action()
-            # immediately returns "4" and read_multiline_feedback returns the
-            # text. We'll set control.action and gate AFTER the worker is in
-            # the gate; for now just stash the feedback so it survives.
             operator = ClaudeOperator(
                 command="claude",
                 model=self.model,

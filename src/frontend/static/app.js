@@ -304,9 +304,22 @@ async function createProject() {
   );
 }
 
+// A stage is "actionable" (the human can approve or send feedback) when it
+// has a draft for review OR has failed validation/execution but left a
+// draft on disk. Approving a failed stage is the human override path —
+// "I read the draft, the validator complaint is bogus, ship it."
+function findActionableStage() {
+  const stages = state.runSummary?.stages || [];
+  return (
+    stages.find((s) => s.status === "human_review") ||
+    stages.find((s) => s.status === "failed") ||
+    null
+  );
+}
+
 async function approveCurrentStage() {
   if (!state.selectedRunId) return;
-  const reviewing = state.runSummary?.stages?.find((s) => s.status === "human_review");
+  const reviewing = findActionableStage();
   if (!reviewing) {
     showToast("Nothing is awaiting review right now.", "warn");
     return;
@@ -345,7 +358,7 @@ async function approveCurrentStage() {
 
 async function sendStageFeedback() {
   if (!state.selectedRunId) return;
-  const reviewing = state.runSummary?.stages?.find((s) => s.status === "human_review");
+  const reviewing = findActionableStage();
   if (!reviewing) {
     showToast("Nothing is awaiting review right now.", "warn");
     return;
@@ -1344,35 +1357,44 @@ function extractTldr(md) {
 }
 
 function renderReviewActions(stage) {
-  // Make the Review-page Approve/Feedback buttons name the stage they act on
-  // and disable them for any stage that isn't actively awaiting review.
+  // Make the Review-page Approve/Feedback buttons name the stage they act
+  // on and disable them only when no stage is actionable (a stage is
+  // "actionable" if it's awaiting review OR has failed validation/execution
+  // — both have a draft on disk the human can act on).
   if (!elements.approveStageButton) return;
-  const reviewing = state.runSummary?.stages?.find((s) => s.status === "human_review");
-  const targetsThisStage = reviewing && stage && reviewing.slug === stage.slug;
-  const atReview = !!reviewing;
+  const actionable = findActionableStage();
+  const targetsThisStage = actionable && stage && actionable.slug === stage.slug;
+  const atReview = !!actionable;
   const short = stage ? shortStageTitle(stage.title) : "";
+  const isFailedAction = actionable && actionable.status === "failed";
 
   if (atReview && targetsThisStage) {
     const stages = state.runSummary?.stages || [];
     const idx = stages.findIndex((s) => s.slug === stage.slug);
     const next = stages[idx + 1];
     const nextShort = next ? shortStageTitle(next.title) : "finish";
-    elements.approveStageButton.textContent = next
-      ? `✅ Approve → Advance to ${nextShort}`
-      : `✅ Approve → Finish run`;
+    elements.approveStageButton.textContent = isFailedAction
+      ? `⚠️ Approve anyway → Advance to ${nextShort}`
+      : (next
+          ? `✅ Approve → Advance to ${nextShort}`
+          : `✅ Approve → Finish run`);
     elements.approveStageButton.disabled = false;
-    elements.approveStageButton.title = "";
-    elements.sendFeedbackButton.textContent = `✍︎ Re-run ${short} with feedback`;
+    elements.approveStageButton.title = isFailedAction
+      ? "This stage failed validation or execution. Approving will promote the existing draft and advance anyway."
+      : "";
+    elements.sendFeedbackButton.textContent = isFailedAction
+      ? `🔁 Retry ${short} with feedback`
+      : `✍︎ Re-run ${short} with feedback`;
     elements.sendFeedbackButton.disabled = false;
     elements.sendFeedbackButton.title = "";
   } else if (atReview && !targetsThisStage) {
     // User is viewing a different stage than the one awaiting review. Let
-    // approve jump focus; feedback still applies to the awaiting stage so
+    // approve jump focus; feedback still applies to the actionable stage so
     // keep it enabled.
-    const reviewingShort = shortStageTitle(reviewing.title);
+    const reviewingShort = shortStageTitle(actionable.title);
     elements.approveStageButton.textContent = `↗ Jump to ${reviewingShort}`;
     elements.approveStageButton.disabled = false;
-    elements.approveStageButton.title = `Currently awaiting review on ${reviewingShort}. Click to focus that stage.`;
+    elements.approveStageButton.title = `${isFailedAction ? "Failed" : "Currently awaiting review"} on ${reviewingShort}. Click to focus that stage.`;
     elements.sendFeedbackButton.textContent = `✍︎ Send Feedback to ${reviewingShort}`;
     elements.sendFeedbackButton.disabled = false;
     elements.sendFeedbackButton.title = `Feedback will re-run ${reviewingShort}, not the stage you're currently viewing.`;

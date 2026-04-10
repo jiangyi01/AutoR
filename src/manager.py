@@ -907,6 +907,38 @@ class ResearchManager:
         continue_session = False
         mark_stage_execution_started(paths, stage)
 
+        # Optional pre-loaded revision feedback. The Studio (or any other
+        # caller) can drop a "<slug>.pending_feedback.txt" file under
+        # operator_state/ to inject feedback into the FIRST attempt of this
+        # stage's prompt instead of waiting for choose_action() on attempt 2.
+        # Strictly opt-in: if the file is absent, behavior is unchanged from
+        # the CLI flow.
+        pending_fb_path = paths.operator_state_dir / f"{stage.slug}.pending_feedback.txt"
+        if pending_fb_path.exists():
+            try:
+                custom_feedback = pending_fb_path.read_text(encoding="utf-8").strip()
+            except Exception:
+                custom_feedback = ""
+            if custom_feedback:
+                revision_feedback = (
+                    "Continue the current stage conversation and improve the existing work. "
+                    "Preserve correct completed parts unless the feedback requires changing them. "
+                    "Address this user feedback:\n"
+                    f"{custom_feedback}"
+                )
+                # If we have a prior session id, continue it so Claude has
+                # the existing draft as context. Otherwise start fresh.
+                continue_session = paths.stage_session_file(stage).exists()
+                append_log_entry(
+                    paths.logs,
+                    f"{stage.slug} pending_feedback_loaded",
+                    custom_feedback,
+                )
+            try:
+                pending_fb_path.unlink()
+            except Exception:
+                pass
+
         while True:
             mark_stage_running_manifest(paths, stage, attempt_no)
             write_attempt_count(paths, stage, attempt_no)
