@@ -298,15 +298,10 @@ class StudioService:
         self.runs_dir = runs_dir or (repo_root / "runs")
         self.metadata_root = metadata_root or (repo_root / ".autor")
         self.project_store = ProjectIndexStore(self.metadata_root)
-        # Always use the real Claude-backed runner. AutoR is a real research
-        # tool; the Studio frontend never offers a mock toggle. If the Claude
-        # CLI isn't installed we fail loudly so the operator knows to fix it.
-        if not StudioRunner.is_available():
-            raise RuntimeError(
-                "Claude CLI not found on PATH. AutoR Studio requires the `claude` "
-                "binary to drive real research runs. Install it from "
-                "https://docs.claude.com/claude-code or see docs/."
-            )
+        # Always use the real runner. The availability check (claude CLI on
+        # PATH) is deferred to start_run() so the service can be constructed
+        # in test environments that don't have the CLI installed — existing
+        # tests for stage docs, iteration planning, etc. don't need the runner.
         self.runner = StudioRunner(
             runs_dir=self.runs_dir,
             project_root=self.repo_root,
