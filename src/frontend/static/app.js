@@ -160,8 +160,12 @@ for (const button of elements.pageButtons) {
   button.addEventListener("click", () => {
     const page = button.dataset.page;
     setPage(page);
-    // When opening Review, jump to the stage that's actually awaiting review
-    // so the document + Approve button line up visually.
+    // Trigger a full load for the tab being navigated to, so the user sees
+    // fresh data for files/paper/history without the poll loop having to
+    // fetch those heavy endpoints continuously.
+    if (state.selectedRunId) {
+      void safeAction(loadRunFull(state.selectedRunId));
+    }
     if (page === "review") {
       const reviewing = state.runSummary?.stages?.find((s) => s.status === "human_review");
       if (reviewing && reviewing.slug !== state.selectedStageSlug) {
@@ -304,15 +308,18 @@ async function createProject() {
   );
 }
 
-// A stage is "actionable" (the human can approve or send feedback) when it
-// has a draft for review OR has failed validation/execution but left a
-// draft on disk. Approving a failed stage is the human override path —
-// "I read the draft, the validator complaint is bogus, ship it."
+// A stage is "actionable" (the human can approve, send feedback, or resume)
+// when it is:
+//   - human_review: normal review gate
+//   - failed: validator or execution failure — user can override or retry
+//   - running: possibly an orphaned worker from a server crash — the backend
+//     lazy-resumes on any action so it's safe to offer the buttons
 function findActionableStage() {
   const stages = state.runSummary?.stages || [];
   return (
     stages.find((s) => s.status === "human_review") ||
     stages.find((s) => s.status === "failed") ||
+    stages.find((s) => s.status === "running") ||
     null
   );
 }
@@ -398,20 +405,36 @@ let pollHandle = null;
 function startPolling() {
   stopPolling();
   pollHandle = setInterval(() => {
+    // Pause when the browser tab is hidden — no point fetching if the user
+    // isn't looking, and it prevents background tabs from accumulating
+    // memory pressure.
+    if (document.hidden) return;
     if (!state.selectedRunId) return;
     const status = state.runSummary?.run_status;
-    // Stop polling once the run is settled and not actively working.
     if (status === "completed" || status === "failed") {
       stopPolling();
       return;
     }
-    void loadRun(state.selectedRunId).catch((err) => console.warn("[poll] loadRun failed", err));
+    // LIGHT poll: only fetch the run summary (1 request). The heavy
+    // endpoints (file tree, paper, history, stage doc, session) are fetched
+    // only on explicit user actions (page tab click, approve, feedback).
+    void pollRunLight(state.selectedRunId).catch((err) => console.warn("[poll] light poll failed", err));
   }, 3000);
-  // Poll every 3s instead of 800ms to avoid memory pressure on low-RAM machines.
-  // Each tick fires 7 API calls (summary, artifacts, tree, paper, history,
-  // stage doc, session). At 800ms that was ~9 req/s and caused swap death
-  // spirals on 8 GB Macs.
 }
+// Pause polling entirely when the browser tab is hidden. Resume (with a
+// full load to catch up on state) when the user comes back.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopPolling();
+  } else if (state.selectedRunId) {
+    const status = state.runSummary?.run_status;
+    if (status !== "completed" && status !== "failed") {
+      // Full load once to catch up, then resume light polling.
+      void loadRunFull(state.selectedRunId).then(startPolling).catch(() => startPolling());
+    }
+  }
+});
+
 // Expose a tiny debug surface so the drive harness can introspect.
 if (typeof window !== "undefined") {
   window.__autor = {
@@ -439,7 +462,52 @@ async function attachSelectedRun() {
   await bootstrap();
 }
 
-async function loadRun(runId) {
+// ---------- Run loading: light vs full ----------
+//
+// CRITICAL MEMORY SAFETY: on an 8 GB Mac the previous design fetched 7
+// endpoints in parallel every poll tick (summary + artifacts + file tree +
+// paper + history + stage doc + session). The file-tree endpoint does a
+// recursive directory walk; the session endpoint parses a growing JSONL.
+// Together with Cursor + Chrome + Claude CLI, this caused a kernel panic
+// (watchdog timeout from 103% compressed pages).
+//
+// New design:
+//   - pollRunLight() — ONLY fetches /api/runs/{id} (the summary). Called
+//     every poll tick. Updates the stage strip, live panel, header, and
+//     activity feed — everything the user needs to see while waiting.
+//   - loadRunFull() — fetches ALL 7 endpoints. Called ONCE on initial load,
+//     on explicit user navigation (page tab click, project card click,
+//     approve/feedback), and NEVER from the poll loop.
+
+async function pollRunLight(runId) {
+  state.selectedRunId = runId;
+  const summary = await api(`/api/runs/${runId}`);
+  state.runSummary = summary;
+
+  const matchingProject = state.projects.find(
+    (p) => p.project_id === state.selectedProjectId || p.run_ids.includes(runId)
+  );
+  if (matchingProject) state.selectedProjectId = matchingProject.project_id;
+
+  if (!state.selectedStageSlug || !summary.stages.some((s) => s.slug === state.selectedStageSlug)) {
+    const reviewing = summary.stages.find((s) => s.status === "human_review");
+    const lastApproved = [...summary.stages].reverse().find((s) => s.approved);
+    const running = summary.stages.find((s) => s.status === "running");
+    state.selectedStageSlug =
+      reviewing?.slug || lastApproved?.slug || running?.slug ||
+      summary.current_stage_slug || summary.stages.at(-1)?.slug || null;
+  }
+
+  // Only render the cheap panels that depend on the summary.
+  renderHeader();
+  renderStages();
+  renderLivePanel();
+  renderActivityFeed();
+  renderReviewProgressSummary();
+  renderStagePanels();
+}
+
+async function loadRunFull(runId) {
   const runChanged = runId !== state.selectedRunId;
   state.selectedRunId = runId;
   if (runChanged) {
@@ -464,26 +532,17 @@ async function loadRun(runId) {
   state.selectedVersionId = state.selectedVersionId || history.current_version_id || history.versions.at(-1)?.version_id || null;
 
   const matchingProject = state.projects.find(
-    (project) => project.project_id === state.selectedProjectId || project.run_ids.includes(runId)
+    (p) => p.project_id === state.selectedProjectId || p.run_ids.includes(runId)
   );
-  if (matchingProject) {
-    state.selectedProjectId = matchingProject.project_id;
-  }
+  if (matchingProject) state.selectedProjectId = matchingProject.project_id;
 
-  if (!state.selectedStageSlug || !summary.stages.some((stage) => stage.slug === state.selectedStageSlug)) {
-    // Prefer the stage actually awaiting review (human's job), then the
-    // last approved stage (so the user has something to read), then the
-    // current running stage (whose markdown may not exist yet), then last.
+  if (!state.selectedStageSlug || !summary.stages.some((s) => s.slug === state.selectedStageSlug)) {
     const reviewing = summary.stages.find((s) => s.status === "human_review");
     const lastApproved = [...summary.stages].reverse().find((s) => s.approved);
     const running = summary.stages.find((s) => s.status === "running");
     state.selectedStageSlug =
-      reviewing?.slug ||
-      lastApproved?.slug ||
-      running?.slug ||
-      summary.current_stage_slug ||
-      summary.stages.at(-1)?.slug ||
-      null;
+      reviewing?.slug || lastApproved?.slug || running?.slug ||
+      summary.current_stage_slug || summary.stages.at(-1)?.slug || null;
   }
 
   renderProjects();
@@ -503,13 +562,10 @@ async function loadRun(runId) {
   renderIterationForm();
 
   if (state.selectedStageSlug) {
-    // Tolerate failures here — a stage that's mid-write may briefly 404 or
-    // return empty. We'd rather render the rest of the workspace than throw
-    // out the whole loadRun for one missing markdown file.
     try {
       await loadStageDocument(state.selectedStageSlug);
     } catch (err) {
-      console.warn("[loadRun] stage doc fetch failed; rendering empty panel", err);
+      console.warn("[loadRunFull] stage doc fetch failed", err);
       state.stageDocument = "";
       renderStagePanels();
     }
@@ -517,6 +573,9 @@ async function loadRun(runId) {
     renderStagePanels();
   }
 }
+
+// Backwards-compatible alias — callers that need the full load use this.
+const loadRun = loadRunFull;
 
 async function loadStageDocument(stageSlug) {
   if (!state.selectedRunId) {
@@ -773,8 +832,11 @@ function renderLivePanel() {
     elements.liveApprove.textContent = "✅ Approve";
     elements.liveFeedback.textContent = "✍︎ Review";
   } else if (focus.status === "running") {
-    elements.liveApprove.textContent = `⏳ Drafting ${shortStageTitle(focus.title)}…`;
-    elements.liveFeedback.textContent = "✍︎ Wait…";
+    // If the stage is "running" it might be an orphan from a crashed server.
+    // Show resume controls so the user can kick it back into action.
+    elements.liveApprove.textContent = `🔄 Resume ${shortStageTitle(focus.title)}`;
+    elements.liveFeedback.textContent = "🔁 Restart";
+    canAct = true;  // Enable the buttons for orphan recovery
   } else {
     elements.liveApprove.textContent = "✅ Approve";
     elements.liveFeedback.textContent = "✍︎ Review";
@@ -1369,8 +1431,19 @@ function renderReviewActions(stage) {
   const atReview = !!actionable;
   const short = stage ? shortStageTitle(stage.title) : "";
   const isFailedAction = actionable && actionable.status === "failed";
+  const isRunningOrphan = actionable && actionable.status === "running";
 
-  if (atReview && targetsThisStage) {
+  if (isRunningOrphan && targetsThisStage) {
+    // Stage is "running" but the worker may be dead (server crashed).
+    // Offer Resume (which triggers lazy-resume on the backend) and
+    // Feedback (which restarts the stage with instructions).
+    elements.approveStageButton.textContent = `🔄 Resume ${short}`;
+    elements.approveStageButton.disabled = false;
+    elements.approveStageButton.title = "The runner may have crashed. Click to resume from where it left off.";
+    elements.sendFeedbackButton.textContent = `🔁 Restart ${short} with feedback`;
+    elements.sendFeedbackButton.disabled = false;
+    elements.sendFeedbackButton.title = "";
+  } else if (atReview && targetsThisStage) {
     const stages = state.runSummary?.stages || [];
     const idx = stages.findIndex((s) => s.slug === stage.slug);
     const next = stages[idx + 1];
