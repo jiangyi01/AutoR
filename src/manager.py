@@ -37,6 +37,7 @@ from .intake import (
 )
 from .artifact_index import format_artifact_index_for_prompt, write_artifact_index
 from .experiment_manifest import format_experiment_manifest_for_prompt, write_experiment_manifest
+from .hypothesis_manifest import write_hypothesis_manifest
 from .manifest import (
     ensure_run_manifest,
     format_manifest_status,
@@ -70,6 +71,7 @@ from .utils import (
     append_log_entry,
     build_decision_ledger_context,
     build_handoff_context,
+    build_hypothesis_context,
     build_continuation_prompt,
     build_prompt,
     build_run_paths,
@@ -1072,6 +1074,8 @@ class ResearchManager:
             revision_delta = extract_revision_delta(stage_markdown)
             stage_markdown = strip_revision_delta(stage_markdown)
             write_text(result.stage_file_path, stage_markdown)
+            if stage.slug == "02_hypothesis_generation":
+                write_hypothesis_manifest(paths, stage_markdown)
             validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
             if validation_errors:
                 mark_stage_failed_manifest(paths, stage, "; ".join(validation_errors))
@@ -1122,6 +1126,8 @@ class ResearchManager:
                 revision_delta = extract_revision_delta(stage_markdown)
                 stage_markdown = strip_revision_delta(stage_markdown)
                 write_text(repair_result.stage_file_path, stage_markdown)
+                if stage.slug == "02_hypothesis_generation":
+                    write_hypothesis_manifest(paths, stage_markdown)
                 validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
                 if validation_errors:
                     self.ui.show_status(
@@ -1150,6 +1156,8 @@ class ResearchManager:
                     )
 
                     stage_markdown = read_text(repair_result.stage_file_path)
+                    if stage.slug == "02_hypothesis_generation":
+                        write_hypothesis_manifest(paths, stage_markdown)
                     validation_errors = validate_stage_markdown(stage_markdown, stage=stage, paths=paths) + validate_stage_artifacts(stage, paths)
                     if validation_errors:
                         append_log_entry(
@@ -1388,6 +1396,19 @@ class ResearchManager:
                 "The following decisions, assumptions, and open questions were recorded in earlier stages. "
                 "Respect locked decisions and accepted assumptions. Address open questions when relevant.\n\n"
                 + ledger_context
+                + "\n"
+            )
+
+        hypothesis_context = build_hypothesis_context(paths)
+        if hypothesis_context and stage.number >= 3:
+            stage_template = (
+                stage_template.rstrip()
+                + "\n\n# Hypothesis Context (from Stage 02)\n\n"
+                "The following typed claims were approved in Stage 02.\n"
+                "- Treat **Theoretical Propositions** as accepted premises rather than direct experimental targets.\n"
+                "- Treat **Empirical Hypotheses** as the claims that downstream implementation, experimentation, and analysis should test.\n"
+                "- Treat **Paper Claims (Provisional)** as narrative framing only until evidence supports them.\n\n"
+                + hypothesis_context
                 + "\n"
             )
 

@@ -48,6 +48,7 @@ class RunPaths:
     data_dir: Path
     results_dir: Path
     experiment_manifest: Path
+    hypothesis_manifest: Path
     writing_dir: Path
     figures_dir: Path
     artifacts_dir: Path
@@ -143,6 +144,12 @@ LATEX_SUFFIXES = {".tex"}
 PDF_SUFFIXES = {".pdf"}
 BIB_SUFFIXES = {".bib"}
 
+TYPED_HYPOTHESIS_HEADINGS = [
+    "Theoretical Propositions",
+    "Empirical Hypotheses",
+    "Paper Claims (Provisional)",
+]
+
 
 def create_run_root(runs_dir: Path) -> Path:
     runs_dir.mkdir(parents=True, exist_ok=True)
@@ -178,6 +185,7 @@ def build_run_paths(run_root: Path) -> RunPaths:
         data_dir=workspace_root / "data",
         results_dir=workspace_root / "results",
         experiment_manifest=workspace_root / "results" / "experiment_manifest.json",
+        hypothesis_manifest=workspace_root / "notes" / "hypothesis_manifest.json",
         writing_dir=workspace_root / "writing",
         figures_dir=workspace_root / "figures",
         artifacts_dir=workspace_root / "artifacts",
@@ -696,6 +704,27 @@ def validate_stage_markdown(
                     "Assumptions, and Rejected Alternatives."
                 )
 
+    if stage is not None and stage.slug == "02_hypothesis_generation":
+        hypothesis_sections = extract_typed_hypothesis_sections(markdown)
+        for heading in TYPED_HYPOTHESIS_HEADINGS:
+            if heading not in hypothesis_sections:
+                problems.append(
+                    "Stage 02 'Key Results' must include typed subsections for Theoretical Propositions, "
+                    "Empirical Hypotheses, and Paper Claims (Provisional)."
+                )
+                break
+        identifier_patterns = {
+            "Theoretical Propositions": r"\*\*T\d+\*\*:",
+            "Empirical Hypotheses": r"\*\*H\d+\*\*:",
+            "Paper Claims (Provisional)": r"\*\*C\d+\*\*:",
+        }
+        for heading, pattern in identifier_patterns.items():
+            section = hypothesis_sections.get(heading)
+            if section is not None and not re.search(pattern, section):
+                problems.append(
+                    f"Stage 02 subsection '{heading}' must include at least one typed identifier."
+                )
+
     options_section = extract_markdown_section(markdown, "Your Options")
     if options_section is not None:
         option_sequence = parse_numbered_list_sequence(options_section)
@@ -735,6 +764,12 @@ def validate_stage_markdown(
 def validate_stage_artifacts(stage: StageSpec, paths: RunPaths) -> list[str]:
     problems: list[str] = []
     freshness_cutoff = stage_execution_started_at(paths, stage)
+
+    if stage.number == 1:
+        from .evidence_ledger import validate_literature_evidence
+
+        for problem in validate_literature_evidence(paths):
+            problems.append(f"{stage.stage_title}: {problem}")
 
     if stage.number >= 3:
         if _count_files_with_suffixes(paths.data_dir, MACHINE_DATA_SUFFIXES) == 0:
@@ -816,6 +851,11 @@ def validate_stage_artifacts(stage: StageSpec, paths: RunPaths) -> list[str]:
             problems.append(
                 f"{stage.stage_title} requires citation_verification.json under workspace/artifacts."
             )
+        else:
+            from .evidence_ledger import validate_citation_verification
+
+            for problem in validate_citation_verification(paths.artifacts_dir / "citation_verification.json"):
+                problems.append(f"{stage.stage_title}: {problem}")
 
         if not (paths.artifacts_dir / "self_review.json").exists():
             problems.append(
@@ -1031,6 +1071,50 @@ def build_handoff_context(paths: RunPaths, upto_stage: StageSpec | None = None, 
         if path.exists()
     ]
     return "\n\n".join(parts).strip() or "No stage handoff summaries available yet."
+
+
+def extract_typed_hypothesis_sections(stage_markdown: str) -> dict[str, str]:
+    key_results = extract_markdown_section(stage_markdown, "Key Results")
+    if not key_results:
+        return {}
+
+    pattern = re.compile(
+        r"^### (Theoretical Propositions|Empirical Hypotheses|Paper Claims \(Provisional\))\s*$\n?(.*?)(?=^### |\Z)",
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    sections: dict[str, str] = {}
+    for match in pattern.finditer(key_results):
+        heading = match.group(1).strip()
+        body = match.group(2).strip()
+        if body:
+            sections[heading] = body
+    return sections
+
+
+def extract_hypothesis_context(stage_markdown: str) -> str | None:
+    sections = extract_typed_hypothesis_sections(stage_markdown)
+    if not sections:
+        return None
+
+    parts = [
+        f"### {heading}\n{sections[heading]}"
+        for heading in TYPED_HYPOTHESIS_HEADINGS
+        if heading in sections
+    ]
+    return "\n\n".join(parts) if parts else None
+
+
+def build_hypothesis_context(paths: RunPaths) -> str | None:
+    from .hypothesis_manifest import format_hypothesis_manifest_for_prompt, load_hypothesis_manifest
+
+    manifest = load_hypothesis_manifest(paths.hypothesis_manifest)
+    if manifest is not None:
+        return format_hypothesis_manifest_for_prompt(manifest)
+
+    stage_02_handoff = paths.handoff_dir / "02_hypothesis_generation.md"
+    if not stage_02_handoff.exists():
+        return None
+    return extract_hypothesis_context(read_text(stage_02_handoff))
 
 
 def build_decision_ledger_context(paths: RunPaths, upto_stage: StageSpec | None = None) -> str | None:

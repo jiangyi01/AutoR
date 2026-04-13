@@ -14,12 +14,15 @@ Given the user's research goal, build a high-quality research landscape overview
 - Distinguish seminal work, strong recent methods, conflicting lines of evidence, and likely open gaps.
 - Note benchmark conventions, commonly used datasets, strong baselines, evaluation practices, and methodological failure modes when relevant.
 - Call out where evidence is strong, weak, inconsistent, or missing.
+- Produce a lightweight claim-to-source ledger so the survey is auditable downstream.
 - Produce a literature-grounded direction that could support downstream hypothesis generation and study design.
 
 ## Filesystem Requirements
 
 - All generated working files must remain under `{{WORKSPACE_ROOT}}`.
 - Put reading notes, paper summaries, bibliographic notes, and topic maps under `{{WORKSPACE_LITERATURE_DIR}}`.
+- Write `{{WORKSPACE_LITERATURE_DIR}}/sources.json` as a structured source catalog with stable `source_id` values.
+- Write `{{WORKSPACE_LITERATURE_DIR}}/claims.json` as a structured survey claim ledger whose `source_ids` point back to `sources.json`.
 - Put temporary thinking or unresolved questions under `{{WORKSPACE_NOTES_DIR}}`.
 - If you create structured survey tables, place them in `{{WORKSPACE_LITERATURE_DIR}}`.
 - The stage summary draft for the current attempt must be written to `{{STAGE_OUTPUT_PATH}}`.
@@ -46,6 +49,7 @@ Additional expectations for this stage:
   - major research clusters or schools of thought
   - representative prior approaches
   - important limitations, tensions, or open problems
+  - the strongest evidence-backed claims and where evidence is still thin
   - concrete implications for the next stage
 - `Files Produced` should list the main literature artifacts created in the workspace.
 - `Suggestions for Refinement` should propose meaningful ways to sharpen scope, compare competing literatures, or deepen evidence quality.
@@ -56,3 +60,4 @@ Additional expectations for this stage:
 - Do not approve the stage yourself.
 - Do not write outside the current run directory.
 - Do not produce a shallow reading list in place of actual synthesis.
+- Do not leave substantive survey claims ungrounded when they belong in `claims.json`.

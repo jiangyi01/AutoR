@@ -590,6 +590,8 @@ Original stderr:
 
         if stage.number == 1 and "smoke test" in user_goal.lower():
             intro_path = paths.notes_dir / "autor_intro.md"
+            sources_path = paths.literature_dir / "sources.json"
+            claims_path = paths.literature_dir / "claims.json"
             write_text(
                 intro_path,
                 (
@@ -605,6 +607,36 @@ Original stderr:
                     "7. Writing\n"
                     "8. Dissemination\n\n"
                     "Every stage writes artifacts into an isolated run directory and must be explicitly approved by the user.\n"
+                ),
+            )
+            write_text(
+                sources_path,
+                json.dumps(
+                    {
+                        "sources": [
+                            {
+                                "source_id": "S1",
+                                "title": "AutoR product overview",
+                                "path": relative_to_run(intro_path, paths.run_root),
+                            }
+                        ]
+                    },
+                    indent=2,
+                ),
+            )
+            write_text(
+                claims_path,
+                json.dumps(
+                    {
+                        "claims": [
+                            {
+                                "claim_id": "CL1",
+                                "statement": "AutoR is a terminal-first, file-based, human-in-the-loop research workflow runner.",
+                                "source_ids": ["S1"],
+                            }
+                        ]
+                    },
+                    indent=2,
                 ),
             )
             stage_markdown = (
@@ -627,6 +659,8 @@ Original stderr:
                 "- This output is a product demo and workflow intro, not a real research result.\n\n"
                 "## Files Produced\n"
                 f"- `{relative_to_run(intro_path, paths.run_root)}`\n"
+                f"- `{relative_to_run(sources_path, paths.run_root)}`\n"
+                f"- `{relative_to_run(claims_path, paths.run_root)}`\n"
                 f"- `{relative_to_run(note_path, paths.run_root)}`\n"
                 f"- `{relative_to_run(stage_tmp_path, paths.run_root)}`\n\n"
                 "## Decision Ledger\n"
@@ -638,6 +672,144 @@ Original stderr:
                 "1. Switch from fake mode to the real Claude operator and record a live stage execution.\n"
                 "2. Tune the terminal theme, colors, and screen layout for recording aesthetics.\n"
                 "3. Expand the intro note with a concrete example run and artifact tour before moving on.\n\n"
+                "## Your Options\n"
+                "1. Use suggestion 1\n"
+                "2. Use suggestion 2\n"
+                "3. Use suggestion 3\n"
+                "4. Refine with your own feedback\n"
+                "5. Approve and continue\n"
+                "6. Abort\n"
+            )
+        elif stage.slug == "01_literature_survey":
+            sources_path = paths.literature_dir / "sources.json"
+            claims_path = paths.literature_dir / "claims.json"
+            write_text(
+                sources_path,
+                json.dumps(
+                    {
+                        "sources": [
+                            {
+                                "source_id": "S1",
+                                "title": "Foundational long-context prompting study",
+                                "path": relative_to_run(note_path, paths.run_root),
+                            },
+                            {
+                                "source_id": "S2",
+                                "title": "Retrieval-augmented reasoning baseline",
+                                "path": relative_to_run(note_path, paths.run_root),
+                            },
+                        ]
+                    },
+                    indent=2,
+                ),
+            )
+            write_text(
+                claims_path,
+                json.dumps(
+                    {
+                        "claims": [
+                            {
+                                "claim_id": "CL1",
+                                "statement": "Long-context prompting degrades when relevant evidence is diffuse.",
+                                "source_ids": ["S1"],
+                            },
+                            {
+                                "claim_id": "CL2",
+                                "statement": "Retrieval is a common mitigation strategy in recent reasoning systems.",
+                                "source_ids": ["S1", "S2"],
+                            },
+                        ]
+                    },
+                    indent=2,
+                ),
+            )
+            stage_markdown = (
+                f"# Stage {stage.number:02d}: {stage.display_name}\n\n"
+                "## Objective\n"
+                "Validate the literature-survey workflow using a minimal claim-to-source ledger.\n\n"
+                "## Previously Approved Stage Summaries\n"
+                f"{previous_summaries}\n\n"
+                "## What I Did\n"
+                "- Executed fake-operator mode instead of invoking Claude.\n"
+                f"- Wrote supporting source and claim ledgers to `{relative_to_run(sources_path, paths.run_root)}` and `{relative_to_run(claims_path, paths.run_root)}`.\n"
+                f"- Preserved the fake operator note at `{relative_to_run(note_path, paths.run_root)}`.\n"
+                "- Produced a valid Stage 01 summary with traceable survey artifacts.\n\n"
+                "## Key Results\n"
+                "- The fake literature run now produces a structured source catalog and claim ledger.\n"
+                "- Downstream stages can inherit grounded survey claims instead of only prose.\n"
+                "- This remains workflow scaffolding, not a real literature review.\n\n"
+                "## Files Produced\n"
+                f"- `{relative_to_run(sources_path, paths.run_root)}`\n"
+                f"- `{relative_to_run(claims_path, paths.run_root)}`\n"
+                f"- `{relative_to_run(note_path, paths.run_root)}`\n"
+                f"- `{relative_to_run(stage_tmp_path, paths.run_root)}`\n\n"
+                "## Decision Ledger\n"
+                "- **Open Questions**: Which real papers should replace the fake source catalog?\n"
+                "- **Locked Decisions**: Stage 01 should emit traceable survey evidence, not only prose.\n"
+                "- **Assumptions**: The fake ledgers are placeholders for workflow validation only.\n"
+                "- **Rejected Alternatives**: Approving a literature stage with no claim-to-source trace.\n\n"
+                "## Suggestions for Refinement\n"
+                "1. Replace the fake source ledger with real paper metadata before continuing.\n"
+                "2. Expand the claim ledger so it captures conflicting evidence, not only supporting evidence.\n"
+                "3. Add dataset and benchmark notes to the literature directory alongside the ledgers.\n\n"
+                "## Your Options\n"
+                "1. Use suggestion 1\n"
+                "2. Use suggestion 2\n"
+                "3. Use suggestion 3\n"
+                "4. Refine with your own feedback\n"
+                "5. Approve and continue\n"
+                "6. Abort\n"
+            )
+        elif stage.slug == "02_hypothesis_generation":
+            hypotheses_path = paths.notes_dir / "hypotheses.md"
+            write_text(
+                hypotheses_path,
+                (
+                    "# Typed Hypotheses\n\n"
+                    "## Theoretical Propositions\n"
+                    "- T1: Retrieval addresses context fragmentation.\n\n"
+                    "## Empirical Hypotheses\n"
+                    "- H1: Retrieval will improve long-context accuracy.\n\n"
+                    "## Paper Claims\n"
+                    "- C1: Retrieval is a practical long-context fix.\n"
+                ),
+            )
+            stage_markdown = (
+                f"# Stage {stage.number:02d}: {stage.display_name}\n\n"
+                "## Objective\n"
+                "Validate the Stage 02 workflow using typed propositions, empirical hypotheses, and provisional paper claims.\n\n"
+                "## Previously Approved Stage Summaries\n"
+                f"{previous_summaries}\n\n"
+                "## What I Did\n"
+                "- Executed fake-operator mode instead of invoking Claude.\n"
+                f"- Wrote supporting hypothesis notes to `{relative_to_run(hypotheses_path, paths.run_root)}`.\n"
+                f"- Preserved the fake operator note at `{relative_to_run(note_path, paths.run_root)}`.\n"
+                "- Produced a typed Stage 02 summary so downstream stages can consume structured hypothesis context.\n\n"
+                "## Key Results\n\n"
+                "### Theoretical Propositions\n"
+                "- **T1**: Retrieval reduces context fragmentation in long-context prompting.\n"
+                "  - Derived from: Prior long-context failure patterns summarized in Stage 01.\n\n"
+                "### Empirical Hypotheses\n"
+                "- **H1**: Adding retrieval will improve long-context task accuracy by at least 8 points.\n"
+                "  - Depends on: T1\n"
+                "  - Verification: Compare retrieval-on vs retrieval-off on the benchmark suite.\n\n"
+                "### Paper Claims (Provisional)\n"
+                "- **C1**: Retrieval is a practical way to stabilize long-context reasoning.\n"
+                "  - Status: proposed\n\n"
+                "## Files Produced\n"
+                f"- `{relative_to_run(hypotheses_path, paths.run_root)}`\n"
+                f"- `{relative_to_run(paths.hypothesis_manifest, paths.run_root)}`\n"
+                f"- `{relative_to_run(note_path, paths.run_root)}`\n"
+                f"- `{relative_to_run(stage_tmp_path, paths.run_root)}`\n\n"
+                "## Decision Ledger\n"
+                "- **Open Questions**: How large should the retrieval gain threshold be?\n"
+                "- **Locked Decisions**: Keep typed claims separated for downstream stages.\n"
+                "- **Assumptions**: Stage 03 onward will treat empirical hypotheses as the main test targets.\n"
+                "- **Rejected Alternatives**: Mixing theory, hypotheses, and paper narrative into one prose block.\n\n"
+                "## Suggestions for Refinement\n"
+                "1. Add a second empirical hypothesis about latency trade-offs.\n"
+                "2. Tighten the effect-size threshold with more prior evidence.\n"
+                "3. Add a weaker fallback paper claim in case the main hypothesis is only partially supported.\n\n"
                 "## Your Options\n"
                 "1. Use suggestion 1\n"
                 "2. Use suggestion 2\n"

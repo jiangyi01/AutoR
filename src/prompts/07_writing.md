@@ -9,8 +9,10 @@ Turn the approved problem framing, method, evidence, and analysis into a submiss
 ## Your Responsibilities
 
 - Draft paper-ready LaTeX grounded in the actual approved outputs and real workspace artifacts.
+- Distinguish verified empirical findings from provisional Stage 02 paper claims. Do not present provisional claims as confirmed results.
 - Use the strongest validated narrative from prior stages instead of writing generic background-heavy prose.
 - Verify that citations, figures, tables, and claims are internally consistent.
+- Produce a lightweight claim-to-citation ledger so major manuscript claims stay auditable.
 - Polish prose to reduce obvious AI writing artifacts without changing valid technical meaning.
 - Compile the manuscript to PDF and fix compilation issues when possible.
 - Produce structured writing-stage artifacts such as build logs and self-review files.
@@ -159,6 +161,7 @@ Minimum bar:
     - unresolved citations
     - missing figures
     - broken refs or labels if any
+    - `claim_coverage`: major manuscript claims, each mapped to citation keys or source IDs
 25. Package a submission bundle when practical.
 26. Write the stage summary draft to `{{STAGE_OUTPUT_PATH}}`.
 

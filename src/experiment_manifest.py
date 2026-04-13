@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -17,6 +17,7 @@ class ExperimentManifest:
     code_artifacts: list[str]
     note_artifacts: list[str]
     summary: dict[str, int]
+    summary_extras: dict[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -25,11 +26,20 @@ class ExperimentManifest:
             "result_artifacts": self.result_artifacts,
             "code_artifacts": self.code_artifacts,
             "note_artifacts": self.note_artifacts,
-            "summary": self.summary,
+            "summary": {**self.summary, **self.summary_extras},
         }
 
     @classmethod
     def from_dict(cls, payload: dict[str, object]) -> "ExperimentManifest":
+        summary_raw = dict(payload.get("summary", {}))
+        summary: dict[str, int] = {}
+        summary_extras: dict[str, object] = {}
+        for key, value in summary_raw.items():
+            coerced = _coerce_summary_int(value)
+            if coerced is None:
+                summary_extras[str(key)] = value
+            else:
+                summary[str(key)] = coerced
         return cls(
             generated_at=str(payload.get("generated_at", "")).strip(),
             ready_for_analysis=bool(payload.get("ready_for_analysis", False)),
@@ -48,15 +58,13 @@ class ExperimentManifest:
                 for item in payload.get("note_artifacts", [])
                 if str(item).strip()
             ],
-            summary={
-                str(key): int(value)
-                for key, value in dict(payload.get("summary", {})).items()
-                if isinstance(value, (int, float)) or (isinstance(value, str) and value.strip().lstrip("-").isdigit())
-            },
+            summary=summary,
+            summary_extras=summary_extras,
         )
 
 
 def write_experiment_manifest(paths: RunPaths) -> ExperimentManifest:
+    existing = load_experiment_manifest(paths.experiment_manifest)
     artifact_index = write_artifact_index(paths)
     result_artifacts = [
         artifact
@@ -76,6 +84,7 @@ def write_experiment_manifest(paths: RunPaths) -> ExperimentManifest:
             "code_artifact_count": len(code_artifacts),
             "note_artifact_count": len(note_artifacts),
         },
+        summary_extras=dict(existing.summary_extras) if existing is not None else {},
     )
     paths.experiment_manifest.write_text(
         json.dumps(manifest.to_dict(), indent=2, ensure_ascii=True) + "\n",
@@ -155,6 +164,14 @@ def format_experiment_manifest_for_prompt(manifest: ExperimentManifest, max_resu
         for rel_path in manifest.note_artifacts[:max_results]:
             lines.append(f"- `{rel_path}`")
 
+    if manifest.summary_extras:
+        lines.append("\n### Additional Summary Fields")
+        for key, value in manifest.summary_extras.items():
+            rendered = value
+            if isinstance(value, (dict, list)):
+                rendered = json.dumps(value, ensure_ascii=True, sort_keys=True)
+            lines.append(f"- {key}: {rendered}")
+
     return "\n".join(lines)
 
 
@@ -186,3 +203,17 @@ def _format_schema(schema: object) -> str:
         pieces.append(f"items={schema['item_count']}")
 
     return ", ".join(pieces)
+
+
+def _coerce_summary_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.lstrip("-").isdigit():
+            return int(stripped)
+    return None

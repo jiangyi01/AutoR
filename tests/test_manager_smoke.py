@@ -144,6 +144,44 @@ class ScriptedSmokeOperator:
                 write_text(path, content)
                 produced.append(relative_to_run(path, paths.run_root))
 
+        if stage.slug == "01_literature_survey":
+            sources_path = paths.literature_dir / "sources.json"
+            claims_path = paths.literature_dir / "claims.json"
+            write_text(
+                sources_path,
+                json.dumps(
+                    {
+                        "sources": [
+                            {
+                                "source_id": "S1",
+                                "title": "Smoke literature source",
+                                "path": "workspace/notes/01_literature_survey_smoke_note.md",
+                            }
+                        ]
+                    }
+                ),
+            )
+            write_text(
+                claims_path,
+                json.dumps(
+                    {
+                        "claims": [
+                            {
+                                "claim_id": "CL1",
+                                "statement": "Smoke literature review produced a traceable source ledger.",
+                                "source_ids": ["S1"],
+                            }
+                        ]
+                    }
+                ),
+            )
+            produced.extend(
+                [
+                    relative_to_run(sources_path, paths.run_root),
+                    relative_to_run(claims_path, paths.run_root),
+                ]
+            )
+
         note_path = paths.notes_dir / f"{stage.slug}_smoke_note.md"
         write_text(note_path, f"# Smoke Note\n\nStage: {stage.slug}\nInvocation: {invocation}\n")
         produced.append(relative_to_run(note_path, paths.run_root))
@@ -195,7 +233,20 @@ class ScriptedSmokeOperator:
             write_text(paths.artifacts_dir / "build_log.txt", "Final status: SUCCESS\n")
             write_text(
                 paths.artifacts_dir / "citation_verification.json",
-                json.dumps({"overall_status": "pass", "total_citations": 1}),
+                json.dumps(
+                    {
+                        "overall_status": "pass",
+                        "total_citations": 1,
+                        "verified_citations": 1,
+                        "unresolved_citations": 0,
+                        "claim_coverage": [
+                            {
+                                "claim": "Smoke writing claim",
+                                "citation_keys": ["smoke2026"],
+                            }
+                        ],
+                    }
+                ),
             )
             write_text(
                 paths.artifacts_dir / "self_review.json",
@@ -231,6 +282,51 @@ class ScriptedSmokeOperator:
             f"{index}. {text}"
             for index, text in enumerate(DEFAULT_REFINEMENT_SUGGESTIONS, start=1)
         )
+
+        if stage.slug == "02_hypothesis_generation":
+            files = "\n".join(
+                [
+                    f"- `{path}`" for path in produced
+                ]
+                + [f"- `{relative_to_run(paths.hypothesis_manifest, paths.run_root)}`"]
+            )
+            return (
+                f"# Stage {stage.number:02d}: {stage.display_name}\n\n"
+                "## Objective\n"
+                "Produce typed claims that downstream stages can consume without conflating theory, hypotheses, and paper narrative.\n\n"
+                "## Previously Approved Stage Summaries\n"
+                f"{prior}\n\n"
+                "## What I Did\n"
+                f"- Executed the scripted smoke operator in {mode} mode.\n"
+                "- Generated typed propositions, empirical hypotheses, and provisional paper claims.\n\n"
+                "## Key Results\n\n"
+                "### Theoretical Propositions\n"
+                "- **T1**: Retrieval reduces context fragmentation in long-context reasoning.\n"
+                "  - Derived from: Stage 01 synthesis and prior long-context literature.\n\n"
+                "### Empirical Hypotheses\n"
+                "- **H1**: Retrieval will improve long-context benchmark accuracy by at least 8 points.\n"
+                "  - Depends on: T1\n"
+                "  - Verification: Compare retrieval-on vs retrieval-off conditions.\n\n"
+                "### Paper Claims (Provisional)\n"
+                "- **C1**: Retrieval is a practical fix for long-context reasoning failures.\n"
+                "  - Status: proposed\n\n"
+                "## Files Produced\n"
+                f"{files}\n\n"
+                "## Decision Ledger\n"
+                f"- **Open Questions**: What real evidence should replace the smoke output for {stage.display_name}?\n"
+                f"- **Locked Decisions**: Keep `{stage.slug}` within the current AutoR workflow.\n"
+                "- **Assumptions**: Downstream stages should primarily operationalize empirical hypotheses.\n"
+                "- **Rejected Alternatives**: Mixing theory, hypotheses, and provisional claims into one prose block.\n\n"
+                "## Suggestions for Refinement\n"
+                f"{suggestions}\n\n"
+                "## Your Options\n"
+                "1. Use suggestion 1\n"
+                "2. Use suggestion 2\n"
+                "3. Use suggestion 3\n"
+                "4. Refine with your own feedback\n"
+                "5. Approve and continue\n"
+                "6. Abort\n"
+            )
 
         return (
             f"# Stage {stage.number:02d}: {stage.display_name}\n\n"

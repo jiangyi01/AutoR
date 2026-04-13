@@ -73,7 +73,20 @@ class WritingPipelineTests(unittest.TestCase):
         write_text(paths.artifacts_dir / "build_log.txt", "=== Build Log ===\nFinal status: SUCCESS\n")
         write_text(
             paths.artifacts_dir / "citation_verification.json",
-            json.dumps({"overall_status": "pass", "total_citations": 1}),
+            json.dumps(
+                {
+                    "overall_status": "pass",
+                    "total_citations": 1,
+                    "verified_citations": 1,
+                    "unresolved_citations": 0,
+                    "claim_coverage": [
+                        {
+                            "claim": "The method improves accuracy on the benchmark.",
+                            "citation_keys": ["test2024"],
+                        }
+                    ],
+                }
+            ),
         )
         write_text(
             paths.artifacts_dir / "self_review.json",
@@ -223,6 +236,16 @@ class WritingPipelineTests(unittest.TestCase):
         (paths.artifacts_dir / "self_review.json").unlink()
         problems = validate_stage_artifacts(STAGE_07, paths)
         self.assertTrue(any("self_review.json" in problem for problem in problems))
+
+    def test_stage07_validation_requires_claim_coverage_in_citation_verification(self) -> None:
+        _, paths = self._build_paths()
+        self._populate_valid_stage07_outputs(paths)
+        write_text(
+            paths.artifacts_dir / "citation_verification.json",
+            json.dumps({"overall_status": "pass", "total_citations": 1}),
+        )
+        problems = validate_stage_artifacts(STAGE_07, paths)
+        self.assertTrue(any("claim_coverage" in problem for problem in problems))
 
     def test_scan_figures_returns_expected_metadata(self) -> None:
         _, paths = self._build_paths()
