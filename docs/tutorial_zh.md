@@ -212,9 +212,68 @@ pip install google-genai pillow pyyaml
 
 ---
 
-## 6. 第三步：先跑一个 smoke test
+## 6. 第三步：大多数用户先直接运行 `python main.py`
 
-第一次不要直接跑正式研究，先确认你的本地链路是通的。
+对绝大多数真实用户来说，最推荐的日常用法不是一开始就写很长的参数，而是：
+
+```bash
+python main.py
+```
+
+然后在终端交互里逐步输入目标、资源和反馈。
+
+这是因为 AutoR 本来就是一个 terminal-first、human-in-the-loop 的系统。实际使用时，很多关键控制都发生在：
+
+- 你怎么描述研究目标
+- 你是否补充已有资源
+- 你怎么审每个 stage
+- 你在审批菜单里怎么要求它返工
+
+所以如果你是第一次上手，或者你更偏向真实人工协作，而不是脚本化批处理，**优先直接运行 `python main.py`**。
+
+### 6.1 交互式启动到底会发生什么
+
+当你直接运行：
+
+```bash
+python main.py
+```
+
+AutoR 会在终端里：
+
+- 让你直接输入研究目标
+- 支持多行输入
+- 在进入 intake 前询问你是否有现成资源要导入
+
+这个模式非常适合第一次上手，因为你不需要先背参数。
+
+一个容易忽略但很有用的细节是：
+
+- 资源不一定非得通过 `--resources` 传入
+- 在交互模式里，你也可以逐个输入文件或目录路径
+- 还可以给每个资源附一行简短说明
+
+这对初学者尤其友好。
+
+### 6.2 什么时候再切到参数模式
+
+当你已经熟悉流程，或者你想：
+
+- 固定 backend / model / venue
+- 复现实验
+- 做批量运行
+- 在脚本里调用
+
+这时再使用显式参数更合适。
+
+也就是说：
+
+- 对人类日常使用，交互模式通常更自然
+- 对复现和自动化，参数模式更方便
+
+### 6.3 可选：先跑一个 smoke test
+
+如果你想先验证本地链路，而不消耗真实 agent 配额，可以跑：
 
 ```bash
 python main.py --fake-operator --goal "UI smoke test"
@@ -242,7 +301,7 @@ python main.py --fake-operator --goal "UI smoke test"
 
 ---
 
-## 7. 第四步：开始第一次正式 run
+## 7. 第四步：需要固定配置时，再用显式参数启动
 
 ### 7.1 最小正式命令
 
@@ -339,6 +398,12 @@ python main.py \
 
 这是提升质量最快的方法之一。
 
+补充一点：
+
+**`--resources` 不只支持单个文件，也支持目录。**
+
+所以如果你已经有一个小型代码仓库、一个数据目录，或者一整包阅读材料，可以直接整体喂进去，不必手工拆散。
+
 ---
 
 ## 8. AutoR 会怎么运行
@@ -378,6 +443,18 @@ python main.py \
 - `5`：当你确认这个 stage 真的足够好时再批准
 
 同一个 stage 内继续 refine 时，AutoR 会尽量沿用同一个会话，而不是每次从零开始重跑。这一点很重要，因为它更适合增量修补。
+
+还有一个很值得注意的细节：
+
+每个 stage summary 里不只有结果说明，还会包含一个 `Decision Ledger`。
+
+你可以把它理解为“当前 run 的阶段性决策账本”，里面通常会沉淀：
+
+- 哪些关键判断已经锁定
+- 还有哪些开放问题
+- 当前阶段为什么这样取舍
+
+这些信息会随着 handoff 一起影响后续阶段，所以它不是装饰性文字，而是研究方向保持稳定的重要机制。
 
 ---
 
@@ -498,11 +575,13 @@ AutoR 的强项不是“第一轮就完美”，而是：
 
 | 场景 | 命令 |
 | --- | --- |
+| 最简单的交互式启动 | `python main.py` |
 | 新建一个 run | `python main.py --goal "你的研究目标"` |
 | 指定 Claude 作为执行层 | `python main.py --operator claude --model sonnet --goal "..."` |
 | 指定 Codex 作为执行层 | `python main.py --operator codex --model default --goal "..."` |
 | 指定投稿 venue | `python main.py --venue neurips_2025 --goal "..."` |
 | 同时带资源启动 | `python main.py --goal "..." --resources paper.pdf refs.bib data.csv notes.md` |
+| 把大体积 run 放到其他磁盘 | `python main.py --runs-dir /path/to/runs --goal "..."` |
 | 跳过 intake | `python main.py --skip-intake --goal "..."` |
 | 跑烟测 | `python main.py --fake-operator --goal "Smoke test"` |
 | 恢复最近一次 run | `python main.py --resume-run latest` |
@@ -549,6 +628,45 @@ python main.py --resume-run latest --rollback-stage 03
 - 从 Stage 03 重新往后推进
 
 如果你修改了研究问题、主假设、baseline 设计、数据设置，通常应该用 rollback，而不是简单 redo。
+
+### 12.2 stage 标识其实不只一种写法
+
+很多人以为只能写 `03`。
+
+实际上，AutoR 当前接受这些写法：
+
+- `03`
+- `3`
+- `03_study_design`
+
+所以这些命令都成立：
+
+```bash
+python main.py --resume-run latest --redo-stage 03
+python main.py --resume-run latest --redo-stage 3
+python main.py --resume-run latest --redo-stage 03_study_design
+```
+
+如果你经常恢复 run，这个细节很省事。
+
+### 12.3 `--runs-dir` 很适合重实验或大文件场景
+
+默认情况下，run 都写在仓库下的 `runs/`。
+
+但如果你要：
+
+- 跑很多实验
+- 生成较大的中间结果
+- 把 run 放到更大的磁盘
+- 把仓库代码和运行产物分开
+
+那就很适合显式指定：
+
+```bash
+python main.py --runs-dir /mnt/large-disk/autor-runs --goal "..."
+```
+
+这不会改变主流程，只是把 run 存储位置换掉。
 
 ---
 
@@ -719,6 +837,45 @@ pip install google-genai pillow pyyaml
 
 这会锦上添花，但不是研究质量本身的来源。
 
+还有一个实务上很重要的点：
+
+**就算方法图生成失败，也不会让整个 run 直接报废。**
+
+所以你可以把它当成增强项，而不是把整个研究流程绑死在它上面。
+
+### 技巧 13：会看调试文件，排障效率会高很多
+
+当你怀疑“为什么这个 stage 老出问题”“为什么恢复后行为不对”“为什么写作阶段没引用到前面的结果”时，不要只盯着终端输出。
+
+这些文件非常有用：
+
+- `run_manifest.json`：看每个 stage 当前是 pending、running、approved、stale 还是 dirty
+- `prompt_cache/`：看这个 stage 当时到底拿到了什么 prompt
+- `operator_state/`：看 session、attempt 和记忆恢复状态
+- `handoff/`：看前面阶段给后面阶段传了什么压缩交接信息
+- `logs_raw.jsonl`：看最原始的 agent 流式输出
+
+这几个文件能显著降低“我不知道系统到底在干什么”的感觉。
+
+### 技巧 14：关注结构化产物，不要只看 PDF
+
+下面这些文件很容易被忽略，但它们对判断 run 质量非常重要：
+
+- `workspace/literature/sources.json`
+- `workspace/literature/claims.json`
+- `workspace/notes/hypothesis_manifest.json`
+- `workspace/results/experiment_manifest.json`
+- `workspace/artifacts/citation_verification.json`
+
+可以简单理解为：
+
+- `sources.json` / `claims.json`：文献和 claim 的结构化证据账本
+- `hypothesis_manifest.json`：Stage 02 收敛出来的 typed hypothesis
+- `experiment_manifest.json`：Stage 05 以后供分析和写作消费的机器可读实验清单
+- `citation_verification.json`：Stage 07 对引用和 claim 覆盖情况的结构化检查
+
+如果这些文件缺失、很空、或者明显和 PDF 内容不一致，通常说明这个 run 还不够扎实。
+
 ---
 
 ## 14. 可直接复制的高质量反馈模板
@@ -845,16 +1002,25 @@ runs/<run_id>/
 | --- | --- |
 | `runs/<run_id>/user_input.txt` | 你的原始研究目标 |
 | `runs/<run_id>/memory.md` | 已批准阶段的跨阶段记忆 |
+| `runs/<run_id>/run_config.json` | 当前 run 绑定的 backend、model、venue 等基础配置 |
+| `runs/<run_id>/run_manifest.json` | 每个 stage 的状态机信息，恢复、重做、回滚时很有价值 |
+| `runs/<run_id>/artifact_index.json` | 对 data/results/figures 的 run 级结构化索引 |
 | `runs/<run_id>/stages/` | 每个 stage 的正式总结 |
+| `runs/<run_id>/handoff/` | 每个已批准 stage 给后续阶段的压缩交接信息 |
+| `runs/<run_id>/prompt_cache/` | 每次 stage attempt 和 repair 的 prompt 缓存 |
+| `runs/<run_id>/operator_state/` | 会话、attempt、恢复状态等本地执行状态 |
 | `runs/<run_id>/logs.txt` | 文本日志 |
 | `runs/<run_id>/logs_raw.jsonl` | 原始流式事件日志 |
 | `runs/<run_id>/workspace/literature/` | 文献整理结果 |
 | `runs/<run_id>/workspace/code/` | 代码 |
 | `runs/<run_id>/workspace/data/` | 数据 |
 | `runs/<run_id>/workspace/results/` | 机器可读结果 |
+| `runs/<run_id>/workspace/results/experiment_manifest.json` | 标准化实验清单，后续分析和写作都会用到 |
 | `runs/<run_id>/workspace/figures/` | 图 |
 | `runs/<run_id>/workspace/writing/` | 论文源文件 |
 | `runs/<run_id>/workspace/artifacts/` | PDF 和打包产物 |
+| `runs/<run_id>/workspace/artifacts/citation_verification.json` | 写作阶段的引用与 claim 覆盖校验结果 |
+| `runs/<run_id>/workspace/notes/hypothesis_manifest.json` | 假设阶段提炼出的结构化假设清单 |
 | `runs/<run_id>/workspace/reviews/` | review / release 材料 |
 
 如果你想找最终 PDF，优先看：

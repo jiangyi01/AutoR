@@ -9,6 +9,7 @@ docs/
 !docs/
 docs/*
 !docs/tutorial_zh.md
+!docs/tutorial_en.md
 examples/
 agentspace/
 assets/paper_gallery_source/
