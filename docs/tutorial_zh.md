@@ -556,6 +556,24 @@ Local execution is only for smoke tests.
 
 同一个 stage 内继续 refine 时，AutoR 会尽量沿用同一个会话，而不是每次从零开始重跑。这一点很重要，因为它更适合增量修补。
 
+补充一个非常实用的交互能力：
+
+在 stage 审批里，如果你选择 `4` 输入自定义反馈，还可以直接输入控制命令：
+
+- `/skip`：跳过当前 stage，直接继续后面的 stage
+- `/back 03`：回到更早的 stage，例如 Stage 03
+- `/back 01_literature_survey`：也支持完整 stage slug
+
+这意味着：
+
+- 默认仍然是顺序推进
+- 但如果你确认当前 stage 先不做、或者需要回到更早阶段重来，不用硬退出整个 run
+
+注意：
+
+- `/back` 是回到更早阶段，不是跳到更晚阶段
+- 如果当前 stage 已经连续失败到超过重试上限，AutoR 也会弹出恢复菜单，让你直接选择“跳过当前阶段”或“回到更早阶段”
+
 还有一个很值得注意的细节：
 
 每个 stage summary 里不只有结果说明，还会包含一个 `Decision Ledger`。

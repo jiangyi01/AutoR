@@ -272,16 +272,15 @@ If `--venue` is omitted, AutoR defaults to `neurips_2025`.
 
 Valid stage identifiers include `03`, `3`, and `03_study_design`.
 
-## 🗓️ Changelog
+## 📰 News
 
-Recent mainline updates are tracked here so new users can quickly see what changed without digging through commits.
+Latest mainline updates:
 
-| Date | Major updates |
-| --- | --- |
-| 2026-04-15 | Added minimal `--operator codex` support alongside Claude, persisted the selected execution backend in `run_config.json`, and improved terminal rendering for backend JSON streams. |
-| 2026-04-13 | Added literature evidence ledgers and citation verification outputs, introduced typed hypothesis manifests, hardened experiment manifest parsing, and added regression coverage for research diagram injection. |
-| 2026-04-10 | Added a decision ledger for human approvals and refined the public showcase gallery so research artifacts are presented more clearly. |
-| 2026-04-08 | Documented optional `--research-diagram` dependencies and tightened the README positioning around human-centered, artifact-backed research execution. |
+- **2026-04-18**: Fixed a stage-summary recovery bug so local normalization now restores the required `Decision Ledger` section and validates draft outputs against the correct `.tmp.md` path. Added stage recovery controls that let operators `/skip` the current stage, `/back <stage>` to an earlier stage, or choose skip / roll back directly after retry exhaustion.
+- **2026-04-15**: Added minimal `--operator codex` support alongside Claude, persisted the selected execution backend in `run_config.json`, and improved terminal rendering for backend JSON streams.
+- **2026-04-13**: Added literature evidence ledgers and citation verification outputs, introduced typed hypothesis manifests, hardened experiment manifest parsing, and added regression coverage for research diagram injection.
+- **2026-04-10**: Added a decision ledger for human approvals and refined the public showcase gallery so research artifacts are presented more clearly.
+- **2026-04-08**: Documented optional `--research-diagram` dependencies and tightened the README positioning around human-centered, artifact-backed research execution.
 
 ## ⚙️ How It Works
 

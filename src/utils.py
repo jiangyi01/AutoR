@@ -1382,6 +1382,7 @@ def canonicalize_stage_markdown(
     memory_text: str,
     markdown: str,
     fallback_text: str = "",
+    stage_output_path: str | None = None,
 ) -> str:
     objective = (
         extract_markdown_section(markdown, "Objective")
@@ -1415,10 +1416,19 @@ def canonicalize_stage_markdown(
     files_produced = extract_markdown_section(markdown, "Files Produced")
     if not files_produced:
         file_refs = _extract_path_references(markdown + "\n" + fallback_text)
-        stage_path = f"stages/{stage.filename}"
+        stage_path = stage_output_path or f"stages/{stage.filename}"
         if stage_path not in file_refs:
             file_refs.insert(0, stage_path)
         files_produced = "\n".join(f"- `{path}`" for path in file_refs[:12]) if file_refs else f"- `{stage_path}`"
+
+    decision_ledger = extract_markdown_section(markdown, "Decision Ledger")
+    if not decision_ledger:
+        decision_ledger = (
+            "- **Open Questions**: Which parts of this stage still require explicit human review before they can be trusted downstream?\n"
+            "- **Locked Decisions**: Preserve the current normalized stage summary structure so the workflow can continue safely.\n"
+            "- **Assumptions**: Existing workspace artifacts and captured execution output remain the best available evidence for this stage.\n"
+            "- **Rejected Alternatives**: Leaving the stage summary incomplete or dropping the currently recovered context."
+        )
 
     suggestions_section = extract_markdown_section(markdown, "Suggestions for Refinement") or ""
     numbered_suggestions = parse_numbered_list(suggestions_section)
@@ -1448,6 +1458,8 @@ def canonicalize_stage_markdown(
         f"{key_results.strip()}\n\n"
         "## Files Produced\n\n"
         f"{files_produced.strip()}\n\n"
+        "## Decision Ledger\n\n"
+        f"{decision_ledger.strip()}\n\n"
         "## Suggestions for Refinement\n"
         f"1. {suggestion_items[0].strip()}\n"
         f"2. {suggestion_items[1].strip()}\n"

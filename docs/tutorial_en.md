@@ -565,6 +565,24 @@ The two most important actions in real use are:
 
 Inside the same stage, AutoR tries to continue the same session instead of opening a fresh one every time. That matters because stage refinement is usually incremental.
 
+There is also one especially practical control feature:
+
+when you choose `4` and enter custom feedback, you can also enter control commands directly:
+
+- `/skip`: skip the current stage and continue
+- `/back 03`: roll back to an earlier stage such as Stage 03
+- `/back 01_literature_survey`: full stage slugs also work
+
+That means:
+
+- the default workflow is still sequential
+- but if you intentionally want to bypass the current stage for now, or return to an earlier stage and rebuild from there, you do not have to abandon the whole run
+
+Notes:
+
+- `/back` is for earlier stages, not for jumping forward
+- if the current stage exhausts the retry limit, AutoR now also shows a recovery menu so you can directly choose to skip the stage or roll back to an earlier one
+
 There is also one important detail many users miss:
 
 every stage summary includes a `Decision Ledger`.

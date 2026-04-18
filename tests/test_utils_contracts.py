@@ -8,6 +8,7 @@ from pathlib import Path
 from src.utils import (
     STAGES,
     build_run_paths,
+    canonicalize_stage_markdown,
     ensure_run_config,
     ensure_run_layout,
     initialize_memory,
@@ -74,6 +75,25 @@ class UtilsContractTests(unittest.TestCase):
         problems = validate_stage_artifacts(stage, paths)
 
         self.assertTrue(any("current stage execution" in problem for problem in problems))
+
+    def test_canonicalize_stage_markdown_restores_decision_ledger_and_valid_files(self) -> None:
+        paths = self._build_paths()
+        stage = STAGES[0]
+        draft_rel = f"stages/{stage.slug}.tmp.md"
+        normalized = canonicalize_stage_markdown(
+            stage=stage,
+            memory_text=paths.memory.read_text(encoding="utf-8"),
+            markdown="",
+            fallback_text="incomplete draft output",
+            stage_output_path=draft_rel,
+        )
+        write_text(paths.stage_tmp_file(stage), normalized)
+
+        problems = validate_stage_markdown(normalized, stage=stage, paths=paths)
+
+        self.assertEqual(problems, [])
+        self.assertIn("## Decision Ledger", normalized)
+        self.assertIn(draft_rel, normalized)
 
 
 if __name__ == "__main__":

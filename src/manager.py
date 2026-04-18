@@ -118,6 +118,7 @@ class ResearchManager:
         self.ui = ui or TerminalUI(output_stream=output_stream)
         self._redo_start_stage: StageSpec | None = None
         self._research_diagram: bool = False
+        self._jump_target_stage: StageSpec | None = None
 
     def run(
         self,
@@ -215,9 +216,17 @@ class ResearchManager:
 
     def _run_from_paths(self, paths: RunPaths, start_stage: StageSpec | None = None) -> bool:
         stages_to_run = self._select_stages_for_run(paths, start_stage)
+        stage_index = 0
 
-        for stage in stages_to_run:
+        while stage_index < len(stages_to_run):
+            stage = stages_to_run[stage_index]
+            self._jump_target_stage = None
             approved = self._run_stage(paths, stage)
+            if self._jump_target_stage is not None:
+                target = self._jump_target_stage
+                stages_to_run = self._select_stages_for_run(paths, target)
+                stage_index = 0
+                continue
             if not approved:
                 append_log_entry(
                     paths.logs,
@@ -232,6 +241,7 @@ class ResearchManager:
                 )
                 self._print("Run aborted.")
                 return False
+            stage_index += 1
 
         append_log_entry(paths.logs, "run_complete", "All stages approved.")
         update_manifest_run_status(
@@ -963,7 +973,12 @@ class ResearchManager:
                     error,
                 )
                 mark_stage_failed_manifest(paths, stage, error)
-                return False
+                return self._handle_stage_exhaustion(
+                    paths=paths,
+                    stage=stage,
+                    attempt_no=max(attempt_no - 1, 1),
+                    last_validation_errors=last_validation_errors,
+                )
             loop_attempts += 1
             mark_stage_running_manifest(paths, stage, attempt_no)
             write_attempt_count(paths, stage, attempt_no)
@@ -1119,6 +1134,7 @@ class ResearchManager:
                         fallback_text="\n\n".join(
                             part for part in [result.stdout, result.stderr, repair_result.stdout, repair_result.stderr] if part
                         ),
+                        stage_output_path=str(repair_result.stage_file_path.relative_to(paths.run_root)).replace("\\", "/"),
                     )
                     write_text(repair_result.stage_file_path, normalized_markdown)
                     append_log_entry(
@@ -1200,7 +1216,18 @@ class ResearchManager:
                 continue
 
             if choice == "4":
-                custom_feedback = self._read_multiline_feedback()
+                while True:
+                    custom_feedback = self._read_multiline_feedback()
+                    if not custom_feedback.strip().startswith("/"):
+                        break
+                    control_handled = self._handle_stage_control_command(
+                        paths=paths,
+                        stage=stage,
+                        attempt_no=attempt_no,
+                        command_text=custom_feedback,
+                    )
+                    if control_handled is not None:
+                        return control_handled
                 revision_feedback = (
                     "Continue the current stage conversation and improve the existing work. "
                     "Preserve correct completed parts unless the feedback requires changing them. "
@@ -1442,6 +1469,7 @@ class ResearchManager:
                 "did not produce a stage summary file.\n\n"
                 + (fallback_text.strip() if fallback_text.strip() else "No stdout or stderr was captured.")
             ),
+            stage_output_path=str(draft_path.relative_to(paths.run_root)).replace("\\", "/"),
         )
         write_text(draft_path, normalized_markdown)
         append_log_entry(
@@ -1460,6 +1488,235 @@ class ResearchManager:
             level="warn",
         )
         return type("FallbackResult", (), {"stage_file_path": draft_path, "stdout": fallback_text, "stderr": ""})()
+
+    def _handle_stage_control_command(
+        self,
+        paths: RunPaths,
+        stage: StageSpec,
+        attempt_no: int,
+        command_text: str,
+    ) -> bool | None:
+        command = command_text.strip()
+        if not command.startswith("/"):
+            return None
+
+        normalized = command.lower()
+        if normalized == "/skip":
+            return self._skip_stage(
+                paths=paths,
+                stage=stage,
+                attempt_no=attempt_no,
+                reason="Human operator skipped this stage via /skip.",
+            )
+
+        if normalized.startswith("/back"):
+            target = self._parse_stage_jump_command(command, current_stage=stage)
+            if target is None:
+                self.ui.show_status(
+                    f"Invalid /back command. Use '/back <stage>' with an earlier stage such as '/back 01' or '/back 03_study_design'.",
+                    level="warn",
+                )
+                return None
+            self._rollback_and_jump(
+                paths=paths,
+                current_stage=stage,
+                target_stage=target,
+                reason=f"Human operator requested /back from {stage.stage_title}.",
+            )
+            return True
+
+        self.ui.show_status(
+            "Unknown control command. Supported commands are '/skip' and '/back <stage>'.",
+            level="warn",
+        )
+        return None
+
+    def _handle_stage_exhaustion(
+        self,
+        paths: RunPaths,
+        stage: StageSpec,
+        attempt_no: int,
+        last_validation_errors: list[str],
+    ) -> bool:
+        input_is_tty = getattr(self.ui.input_stream, "isatty", lambda: False)()
+        if not input_is_tty:
+            return False
+
+        options = [
+            "1. Skip this stage and continue",
+            "2. Roll back to an earlier stage",
+            "3. Abort",
+        ]
+        if stage.number == STAGES[0].number:
+            options[1] = "2. Roll back to an earlier stage (unavailable for Stage 01)"
+
+        self.ui.panel(
+            f"{stage.stage_title} | Recovery",
+            [
+                "AutoR exhausted the bounded retry window for this stage.",
+                "Choose how to recover:",
+                *options,
+            ],
+            color=self.ui.FG_RED,
+        )
+
+        if last_validation_errors:
+            self.ui.panel(
+                "Last Validation Errors",
+                [f"- {problem}" for problem in last_validation_errors],
+                color=self.ui.FG_YELLOW,
+            )
+
+        while True:
+            choice = self.ui.read_single_line("Recovery choice [1/2/3]: ").strip()
+            if choice == "1":
+                return self._skip_stage(
+                    paths=paths,
+                    stage=stage,
+                    attempt_no=attempt_no,
+                    reason="Human operator skipped this stage after bounded retries were exhausted.",
+                )
+            if choice == "2":
+                target = self._prompt_for_rollback_stage(current_stage=stage)
+                if target is None:
+                    continue
+                self._rollback_and_jump(
+                    paths=paths,
+                    current_stage=stage,
+                    target_stage=target,
+                    reason=f"Human operator rolled back after {stage.stage_title} exhausted retries.",
+                )
+                return True
+            if choice == "3":
+                return False
+            self.ui.show_status("Invalid choice. Enter 1, 2, or 3.", level="warn")
+
+    def _parse_stage_jump_command(self, command_text: str, current_stage: StageSpec) -> StageSpec | None:
+        parts = command_text.strip().split(maxsplit=1)
+        if len(parts) != 2:
+            return None
+        target = self._resolve_stage_identifier(parts[1])
+        if target is None or target.number >= current_stage.number:
+            return None
+        return target
+
+    def _prompt_for_rollback_stage(self, current_stage: StageSpec) -> StageSpec | None:
+        if current_stage.number == STAGES[0].number:
+            self.ui.show_status("There is no earlier formal stage to roll back to.", level="warn")
+            return None
+
+        while True:
+            raw = self.ui.read_single_line(
+                f"Enter an earlier stage to roll back to (for example 01 or 03_study_design), or press Enter to cancel: "
+            ).strip()
+            if not raw:
+                return None
+            target = self._resolve_stage_identifier(raw)
+            if target is None:
+                self.ui.show_status(f"Unknown stage identifier: {raw}", level="warn")
+                continue
+            if target.number >= current_stage.number:
+                self.ui.show_status(
+                    f"Rollback target must be earlier than {current_stage.stage_title}.",
+                    level="warn",
+                )
+                continue
+            return target
+
+    def _resolve_stage_identifier(self, value: str) -> StageSpec | None:
+        normalized = value.strip().lower()
+        for candidate in STAGES:
+            if normalized in {candidate.slug.lower(), str(candidate.number), f"{candidate.number:02d}"}:
+                return candidate
+        return None
+
+    def _rollback_and_jump(
+        self,
+        paths: RunPaths,
+        current_stage: StageSpec,
+        target_stage: StageSpec,
+        reason: str,
+    ) -> None:
+        rollback_to_stage(paths, target_stage, reason=reason)
+        append_log_entry(
+            paths.logs,
+            f"{current_stage.slug} rollback_requested",
+            f"Rolled back from {current_stage.stage_title} to {target_stage.stage_title}.\nReason: {reason}",
+        )
+        self.ui.show_status(
+            f"Rolled back to {target_stage.stage_title}. AutoR will resume from there.",
+            level="warn",
+        )
+        self._jump_target_stage = target_stage
+
+    def _skip_stage(
+        self,
+        paths: RunPaths,
+        stage: StageSpec,
+        attempt_no: int,
+        reason: str,
+    ) -> bool:
+        stage_markdown = self._build_skipped_stage_markdown(paths, stage, reason)
+        final_stage_path = paths.stage_file(stage)
+        write_text(final_stage_path, stage_markdown)
+        append_approved_stage_summary(paths.memory, stage, stage_markdown)
+        mark_stage_approved_manifest(
+            paths,
+            stage,
+            attempt_no,
+            self._stage_file_paths(stage_markdown),
+        )
+        write_stage_handoff(paths, stage, stage_markdown)
+        write_artifact_index(paths)
+        write_experiment_manifest(paths)
+        append_log_entry(
+            paths.logs,
+            f"{stage.slug} skipped",
+            (
+                f"Stage was intentionally skipped and promoted as a human-directed skip summary.\n"
+                f"final: {final_stage_path}\n"
+                f"reason: {reason}"
+            ),
+        )
+        self.ui.show_status(
+            f"Skipped {stage.stage_title}. AutoR will continue to the next stage.",
+            level="warn",
+        )
+        return True
+
+    def _build_skipped_stage_markdown(self, paths: RunPaths, stage: StageSpec, reason: str) -> str:
+        previous = approved_stage_summaries(read_text(paths.memory))
+        previous_block = "_None yet._" if previous == "None yet." else previous
+        stage_rel_path = str(paths.stage_file(stage).relative_to(paths.run_root)).replace("\\", "/")
+        return (
+            f"# {stage.stage_title}\n\n"
+            "## Objective\n\n"
+            f"This stage would normally execute {stage.display_name}, but it was intentionally skipped at human direction so the run could continue.\n\n"
+            "## Previously Approved Stage Summaries\n\n"
+            f"{previous_block}\n\n"
+            "## What I Did\n\n"
+            "- Recorded an explicit human-directed skip for this stage.\n"
+            "- Preserved the workflow timeline so downstream stages can continue with a clear audit trail.\n"
+            "- Marked this stage as intentionally incomplete rather than silently fabricating missing work.\n\n"
+            "## Key Results\n\n"
+            "- This stage was skipped intentionally.\n"
+            "- Downstream stages should treat this stage as missing or provisional context, not as completed evidence.\n"
+            f"- Skip reason: {reason}\n\n"
+            "## Files Produced\n\n"
+            f"- `{stage_rel_path}`\n\n"
+            "## Decision Ledger\n\n"
+            "- **Open Questions**: Which downstream claims now need extra scrutiny because this stage was skipped?\n"
+            f"- **Locked Decisions**: {stage.stage_title} was skipped intentionally to keep the run moving.\n"
+            "- **Assumptions**: Later stages will either work around the missing context or surface the missing dependencies explicitly.\n"
+            "- **Rejected Alternatives**: Pretending the skipped work was completed or fabricating artifacts that do not exist.\n\n"
+            "## Suggestions for Refinement\n"
+            "1. Return to this stage later if downstream progress reveals that the skipped work is actually required.\n"
+            "2. Tighten downstream claims so they do not overstate evidence that would have come from this stage.\n"
+            "3. Add explicit notes in later stages when missing context from this skipped stage limits confidence.\n\n"
+            "## Your Options\n"
+            + "\n".join(FIXED_STAGE_OPTIONS)
+            + "\n"
+        )
 
     def _format_rollback_preview(self, paths: RunPaths, rollback_stage: StageSpec) -> str:
         manifest = ensure_run_manifest(paths)
