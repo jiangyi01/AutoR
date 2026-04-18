@@ -862,7 +862,7 @@ function renderLivePanel() {
   // user can see at a glance whether the action is live or the runner is
   // still busy. This is what fixes the "approve button stays green after
   // I clicked it" feel.
-  const canAct = focus.status === "human_review";
+  let canAct = focus.status === "human_review";
   if (canAct) {
     elements.liveApprove.textContent = "✅ Approve";
     elements.liveFeedback.textContent = "✍︎ Review";
@@ -1819,21 +1819,30 @@ function renderWorkspaceSkeleton(message) {
   renderProjectBrief();
   renderEmpty(elements.overviewStageSummary, message);
   renderEmpty(elements.stageDocument, message);
+  // filePreview / paperFrameContainer / paperTexPreview / paperBuildLog
+  // were folded into the Notebook view; renderEmpty no-ops when the element
+  // is missing.
   renderEmpty(elements.filePreview, "Select a file from the workspace tree to preview it here.");
   renderEmpty(elements.paperFrameContainer, "Select a run with writing artifacts to preview the paper.");
   renderEmpty(elements.paperTexPreview, "No manuscript source found.");
   renderEmpty(elements.paperBuildLog, "No build log found.");
   renderEmpty(elements.historySummary, "Select a checkpoint to inspect its stage summary and changed artifacts.");
   renderEmpty(elements.historyStagePreview, "Select a checkpoint to preview its associated stage summary.");
-  elements.versionCount.textContent = "0";
-  elements.traceCount.textContent = "0 events";
-  elements.runSummary.innerHTML = "";
-  elements.artifactSummary.innerHTML = "";
-  elements.stageRail.innerHTML = "";
-  elements.fileTree.innerHTML = "";
-  elements.versionList.innerHTML = "";
-  elements.historyArtifacts.innerHTML = "";
-  elements.traceTimeline.innerHTML = "";
+  const setEmpty = (node, html = "") => {
+    if (node) node.innerHTML = html;
+  };
+  const setText = (node, text) => {
+    if (node) node.textContent = text;
+  };
+  setText(elements.versionCount, "0");
+  setText(elements.traceCount, "0 events");
+  setEmpty(elements.runSummary);
+  setEmpty(elements.artifactSummary);
+  setEmpty(elements.stageRail);
+  setEmpty(elements.fileTree);
+  setEmpty(elements.versionList);
+  setEmpty(elements.historyArtifacts);
+  setEmpty(elements.traceTimeline);
   renderIterationPlaceholder("No iteration brief generated yet.");
 }
 
@@ -1888,6 +1897,10 @@ function renderCode(element, content) {
 }
 
 function renderEmpty(element, message) {
+  // Several consumers (renderWorkspaceSkeleton, renderFilePreview, renderPaperPreview)
+  // refer to elements that were folded into the Notebook view and no longer
+  // exist in the DOM. Bail silently in that case.
+  if (!element) return;
   element.classList.remove("markdown-body");
   element.classList.add("empty-state");
   element.textContent = message;
