@@ -58,7 +58,10 @@ class StudioHttpTests(unittest.TestCase):
         self.assertIn("AutoR Studio", body)
         self.assertIn("Research Control Workspace", body)
         self.assertIn("Human Review", body)
-        self.assertIn("Paper Preview", body)
+        # Paper + Files tabs were folded into the Notebook view on
+        # 2026-04-18; the manuscript preview now opens inside the Notebook
+        # viewer instead.
+        self.assertIn("Notebook", body)
 
     def test_project_endpoints(self) -> None:
         created = self._request_json(

@@ -1,4 +1,7 @@
-const PAGE_IDS = ["overview", "review", "files", "paper", "history"];
+const PAGE_IDS = ["overview", "review", "history", "notebook"];
+// Legacy hash values that used to map to dedicated pages. Both are now folded
+// into the Notebook view, so we redirect them on boot to avoid dead links.
+const LEGACY_PAGE_REDIRECTS = { files: "notebook", paper: "notebook" };
 
 // Lazy-load the session viewer ES module from src/frontend/ via the /studio/ext route.
 let _sessionViewer = null;
@@ -112,7 +115,6 @@ const elements = {
   iterationScopeType: document.getElementById("iteration-scope-type"),
   iterationScopeValue: document.getElementById("iteration-scope-value"),
   iterationFeedback: document.getElementById("iteration-feedback"),
-  reviewerActions: document.getElementById("reviewer-actions"),
   iterationPlan: document.getElementById("iteration-plan"),
   fileTree: document.getElementById("file-tree"),
   filePreviewTitle: document.getElementById("file-preview-title"),
@@ -161,8 +163,8 @@ for (const button of elements.pageButtons) {
     const page = button.dataset.page;
     setPage(page);
     // Trigger a full load for the tab being navigated to, so the user sees
-    // fresh data for files/paper/history without the poll loop having to
-    // fetch those heavy endpoints continuously.
+    // fresh data for review/history without the poll loop having to fetch
+    // those heavy endpoints continuously.
     if (state.selectedRunId) {
       void safeAction(loadRunFull(state.selectedRunId));
     }
@@ -172,7 +174,24 @@ for (const button of elements.pageButtons) {
         void safeAction(loadStageDocument(reviewing.slug));
       }
     }
+    if (page === "notebook" && state.selectedRunId) {
+      void loadNotebookView().then((mod) => mod?.openNotebook?.({ runId: state.selectedRunId, summary: state.runSummary, fileTree: state.fileTree, paperPreview: state.paperPreview, projectBrief: getSelectedProject() }));
+    }
   });
+}
+
+// Lazy-load the Notebook view module so the existing pages keep their
+// bootstrap path unchanged even if notebook.js fails to load.
+let _notebookMod = null;
+async function loadNotebookView() {
+  if (_notebookMod) return _notebookMod;
+  try {
+    _notebookMod = await import("/studio/notebook.js");
+  } catch (err) {
+    console.warn("Notebook module failed to load", err);
+    _notebookMod = null;
+  }
+  return _notebookMod;
 }
 
 if (elements.backToHub) {
@@ -264,6 +283,19 @@ async function bootstrap() {
   }
 
   setConnection("Connected");
+
+  // If we booted into the notebook hash, open it.
+  if (state.page === "notebook" && state.selectedRunId) {
+    void loadNotebookView().then((mod) =>
+      mod?.openNotebook?.({
+        runId: state.selectedRunId,
+        summary: state.runSummary,
+        fileTree: state.fileTree,
+        paperPreview: state.paperPreview,
+        projectBrief: getSelectedProject(),
+      })
+    );
+  }
 }
 
 async function createProject() {
@@ -505,6 +537,9 @@ async function pollRunLight(runId) {
   renderActivityFeed();
   renderReviewProgressSummary();
   renderStagePanels();
+  if (state.page === "notebook" && _notebookMod?.refreshSources) {
+    _notebookMod.refreshSources({ summary: state.runSummary });
+  }
 }
 
 async function loadRunFull(runId) {
@@ -1523,11 +1558,6 @@ function renderIterationForm() {
 function renderIterationPlan() {
   if (!state.iterationPlan) {
     renderIterationPlaceholder("No iteration brief generated yet.");
-    elements.reviewerActions.innerHTML = `
-      <li>Pick a run and stage.</li>
-      <li>Review the stage summary and artifacts.</li>
-      <li>Generate an execution brief for the next iteration.</li>
-    `;
     return;
   }
 
@@ -1547,12 +1577,11 @@ function renderIterationPlan() {
     </div>
     <pre class="brief-block">${escapeHtml(plan.operator_brief)}</pre>
   `;
-  elements.reviewerActions.innerHTML = plan.reviewer_actions
-    .map((action) => `<li>${escapeHtml(action)}</li>`)
-    .join("");
 }
 
 function renderFileTree() {
+  // File tree moved into the Notebook view; bail when DOM is absent.
+  if (!elements.fileTree) return;
   elements.fileTree.innerHTML = "";
   if (!state.fileTree) {
     return;
@@ -1591,6 +1620,8 @@ function renderTreeNode(node) {
 }
 
 function renderFilePreview() {
+  // Files panel was folded into Notebook; bail when DOM is absent.
+  if (!elements.filePreview) return;
   const preview = state.filePreview;
   if (!preview) {
     elements.filePreviewTitle.textContent = "File preview";
@@ -1622,6 +1653,8 @@ function renderFilePreview() {
 }
 
 function renderPaperPreview() {
+  // Paper panel was folded into Notebook; bail when DOM is absent.
+  if (!elements.paperSummary) return;
   const preview = state.paperPreview;
   elements.paperSummary.innerHTML = "";
   elements.paperSections.innerHTML = "";
@@ -2026,8 +2059,11 @@ function getSelectedVersion() {
 }
 
 function readHashPage() {
-  const page = window.location.hash.replace(/^#/, "");
-  return PAGE_IDS.includes(page) ? page : "overview";
+  const raw = window.location.hash.replace(/^#/, "");
+  if (LEGACY_PAGE_REDIRECTS[raw]) {
+    return LEGACY_PAGE_REDIRECTS[raw];
+  }
+  return PAGE_IDS.includes(raw) ? raw : "overview";
 }
 
 function setConnection(text) {

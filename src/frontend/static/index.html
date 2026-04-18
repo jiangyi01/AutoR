@@ -84,9 +84,8 @@
           <nav class="page-nav" aria-label="Studio pages">
             <button class="page-link is-active" data-page="overview" type="button">Overview</button>
             <button class="page-link" data-page="review" type="button">Human Review</button>
-            <button class="page-link" data-page="files" type="button">Files</button>
-            <button class="page-link" data-page="paper" type="button">Paper</button>
             <button class="page-link" data-page="history" type="button">Versions</button>
+            <button class="page-link" data-page="notebook" type="button">Notebook</button>
           </nav>
         </section>
 
@@ -340,105 +339,10 @@
                 </form>
 
                 <section class="inspector-block">
-                  <h3>Reviewer Checklist</h3>
-                  <ul id="reviewer-actions" class="artifact-summary">
-                    <li>Pick a run and stage.</li>
-                    <li>Review the stage summary and artifacts.</li>
-                    <li>Generate an execution brief for the next iteration.</li>
-                  </ul>
-                </section>
-
-                <section class="inspector-block">
                   <h3>Execution Brief</h3>
                   <div id="iteration-plan" class="plan-output empty-state">No iteration brief generated yet.</div>
                 </section>
                 </details>
-              </div>
-            </aside>
-          </div>
-        </section>
-
-        <section id="page-files" class="page">
-          <div class="page-grid files-grid">
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Workspace browser</p>
-                  <h2>Read-only Files</h2>
-                </div>
-                <span class="meta">Editing stays outside the browser for now</span>
-              </div>
-              <div class="panel-body split-stack">
-                <div class="banner subtle">
-                  File editing is intentionally disabled in this first slice. The next integration step is handing files off to VS Code or Overleaf.
-                </div>
-                <div id="file-tree" class="file-tree"></div>
-              </div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Inspector</p>
-                  <h2 id="file-preview-title">File preview</h2>
-                </div>
-                <span id="file-preview-meta" class="meta"></span>
-              </div>
-              <div class="panel-body split-stack">
-                <div class="pill-row">
-                  <span class="pill">Planned: VS Code handoff</span>
-                  <span class="pill">Planned: Overleaf handoff</span>
-                </div>
-                <div id="file-preview" class="document-body empty-state">
-                  Select a file from the workspace tree to preview it here.
-                </div>
-              </div>
-            </section>
-          </div>
-        </section>
-
-        <section id="page-paper" class="page">
-          <div class="page-grid paper-grid">
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Writing studio</p>
-                  <h2>Paper Preview</h2>
-                </div>
-                <span id="paper-status" class="meta">No PDF yet</span>
-              </div>
-              <div class="panel-body split-stack">
-                <div class="banner subtle">
-                  This page is preview-first: manuscript source, compiled PDF, and build log in one place. Editing and compile actions come next.
-                </div>
-                <div id="paper-frame-container" class="paper-frame-container empty-state">
-                  Select a run with writing artifacts to preview the paper.
-                </div>
-              </div>
-            </section>
-
-            <aside class="panel">
-              <div class="panel-header">
-                <h2>Manuscript Sources</h2>
-                <span id="paper-meta" class="meta"></span>
-              </div>
-              <div class="panel-body split-stack">
-                <dl id="paper-summary" class="summary-list"></dl>
-
-                <section class="inspector-block">
-                  <h3>Sections</h3>
-                  <ul id="paper-sections" class="artifact-summary"></ul>
-                </section>
-
-                <section class="inspector-block">
-                  <h3>Main TeX</h3>
-                  <div id="paper-tex-preview" class="document-body empty-state">No manuscript source found.</div>
-                </section>
-
-                <section class="inspector-block">
-                  <h3>Build log</h3>
-                  <div id="paper-build-log" class="document-body empty-state">No build log found.</div>
-                </section>
               </div>
             </aside>
           </div>
@@ -497,6 +401,65 @@
               </div>
               <div class="panel-body">
                 <div id="trace-timeline" class="trace-timeline"></div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="page-notebook" class="page">
+          <div class="notebook-layout">
+            <aside class="notebook-sources" aria-label="Notebook sources">
+              <header class="notebook-col-header">
+                <p class="eyebrow">Sources</p>
+                <h3 id="notebook-project-title">Project</h3>
+              </header>
+              <div class="notebook-sources-body" id="notebook-sources-body">
+                <div class="empty-state">Pick a run to populate sources.</div>
+              </div>
+            </aside>
+
+            <section class="notebook-center" aria-label="Claude Code conversation">
+              <header class="notebook-col-header notebook-center-header">
+                <div>
+                  <p class="eyebrow">Coordinator</p>
+                  <h3>Claude Code</h3>
+                </div>
+                <div class="notebook-center-actions">
+                  <span id="notebook-status-chip" class="status-chip status-idle">Idle</span>
+                  <button id="notebook-reset-button" class="button button-ghost" type="button" title="Start a fresh Claude Code session for this run">Reset session</button>
+                </div>
+              </header>
+              <ol id="notebook-events" class="notebook-events" aria-live="polite"></ol>
+              <form id="notebook-form" class="notebook-input-row">
+                <textarea
+                  id="notebook-input"
+                  rows="3"
+                  placeholder="Ask Claude to inspect a stage, edit a file, compile the paper, or plan the next step. Shift+Enter for newline."
+                ></textarea>
+                <div class="notebook-input-actions">
+                  <span class="notebook-input-hint">Enter to send · Shift+Enter for newline</span>
+                  <button id="notebook-send-button" class="button button-primary" type="submit">Send</button>
+                </div>
+              </form>
+            </section>
+
+            <aside class="notebook-viewer" aria-label="Viewer">
+              <header class="notebook-col-header notebook-viewer-header">
+                <div>
+                  <p class="eyebrow">Viewer</p>
+                  <h3 id="notebook-viewer-title">Nothing open</h3>
+                </div>
+                <span id="notebook-viewer-meta" class="meta"></span>
+              </header>
+              <div class="notebook-viewer-toolbar">
+                <span id="notebook-viewer-path" class="notebook-path-breadcrumb">—</span>
+                <div class="pill-row">
+                  <span class="pill pill-disabled">Open in VS Code (planned)</span>
+                  <span class="pill pill-disabled">Open in Overleaf (planned)</span>
+                </div>
+              </div>
+              <div id="notebook-viewer-body" class="notebook-viewer-body empty-state">
+                Click a file in the left rail, or a tool chip in the conversation, to preview it here.
               </div>
             </aside>
           </div>

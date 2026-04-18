@@ -8,6 +8,13 @@ from pathlib import Path
 from mimetypes import guess_type
 from urllib.parse import parse_qs, urlparse
 
+from .notebook import (
+    ClaudeNotFoundError,
+    NotebookContext,
+    load_transcript,
+    reset_notebook,
+    stream_message,
+)
 from .studio_service import IterationRequest, StudioService, studio_to_dict
 
 
@@ -169,6 +176,28 @@ def build_handler(service: StudioService, static_root: Path):
                 self._write_json(HTTPStatus.OK, payload)
                 return
 
+            if parts == ["api", "notebook", "transcript"]:
+                run_id = query.get("run_id", [""])[0]
+                paths = service._require_run(run_id)
+                events = load_transcript(paths.run_root)
+                session_id = None
+                session_file = paths.run_root / "notebook" / "session.json"
+                if session_file.exists():
+                    try:
+                        session_payload = json.loads(session_file.read_text(encoding="utf-8"))
+                        session_id = session_payload.get("session_id")
+                    except (OSError, json.JSONDecodeError):
+                        session_id = None
+                self._write_json(
+                    HTTPStatus.OK,
+                    {
+                        "run_id": run_id,
+                        "events": events,
+                        "session_id": session_id,
+                    },
+                )
+                return
+
             raise FileNotFoundError(f"Unknown route: {path}")
 
         def _dispatch_post(self) -> None:
@@ -224,6 +253,17 @@ def build_handler(service: StudioService, static_root: Path):
                 )
                 return
 
+            if parts == ["api", "notebook", "stream"]:
+                self._stream_notebook(payload)
+                return
+
+            if parts == ["api", "notebook", "reset"]:
+                run_id = str(payload.get("run_id") or "").strip()
+                paths = service._require_run(run_id)
+                reset_notebook(paths.run_root)
+                self._write_json(HTTPStatus.OK, {"run_id": run_id, "action": "reset"})
+                return
+
             if len(parts) == 5 and parts[:2] == ["api", "runs"] and parts[3:5] == ["iterations", "plan"]:
                 plan = service.plan_iteration(
                     IterationRequest(
@@ -241,6 +281,78 @@ def build_handler(service: StudioService, static_root: Path):
                 return
 
             raise FileNotFoundError(f"Unknown route: {path}")
+
+        def _stream_notebook(self, payload: dict[str, object]) -> None:
+            run_id = str(payload.get("run_id") or "").strip()
+            message = str(payload.get("message") or "").strip()
+            if not run_id:
+                self._write_error(HTTPStatus.BAD_REQUEST, "run_id is required")
+                return
+            if not message:
+                self._write_error(HTTPStatus.BAD_REQUEST, "message is required")
+                return
+
+            try:
+                paths = service._require_run(run_id)
+            except KeyError as exc:
+                self._write_error(HTTPStatus.NOT_FOUND, str(exc))
+                return
+
+            project_thesis = ""
+            try:
+                summary = service.get_run_summary(run_id)
+                run_status = summary.run_status
+                stages = [
+                    {
+                        "slug": stage.slug,
+                        "status": stage.status,
+                        "title": stage.title,
+                    }
+                    for stage in summary.stages
+                ]
+            except Exception:
+                run_status = "unknown"
+                stages = []
+
+            for project in service.project_store.list_projects():
+                if run_id in project.run_ids:
+                    project_thesis = project.thesis
+                    break
+
+            context = NotebookContext(
+                run_root=paths.run_root,
+                repo_root=service.repo_root,
+                thesis=project_thesis,
+                run_status=run_status,
+                stages=stages,
+            )
+
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("X-Accel-Buffering", "no")
+            self.send_header("Connection", "close")
+            self.end_headers()
+
+            def _send(event: dict) -> bool:
+                try:
+                    body = f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode("utf-8")
+                    self.wfile.write(body)
+                    self.wfile.flush()
+                    return True
+                except (BrokenPipeError, ConnectionResetError):
+                    return False
+
+            try:
+                for chunk in stream_message(context, message):
+                    if not _send(chunk):
+                        break
+            except ClaudeNotFoundError as exc:
+                _send({"type": "error", "detail": str(exc)})
+                _send({"type": "done"})
+            except Exception as exc:  # pragma: no cover - defensive
+                _send({"type": "error", "detail": f"Notebook stream crashed: {exc}"})
+                _send({"type": "done"})
 
         def _read_json_body(self) -> dict[str, object]:
             content_length = int(self.headers.get("Content-Length", "0"))
