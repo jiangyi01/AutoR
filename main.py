@@ -7,6 +7,8 @@ from pathlib import Path
 from src.intake import ResourceEntry, classify_resource, collect_resource_paths_from_ui
 from src.manager import ResearchManager
 from src.operator import ClaudeOperator
+from src.operator_codex import CodexOperator
+from src.operator_protocol import OperatorProtocol
 from src.terminal_ui import TerminalUI
 from src.utils import (
     DEFAULT_VENUE,
@@ -37,9 +39,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         help=(
-            "Claude model alias or full model name for real runs. "
-            "Defaults to 'sonnet' for new runs and preserves the existing run model when resuming."
+            "Model alias or full model name for the selected operator backend. "
+            "Defaults to 'sonnet' for Claude runs, 'default' for Codex runs, "
+            "and preserves the existing run model when resuming."
         ),
+    )
+    parser.add_argument(
+        "--operator",
+        choices=["claude", "codex"],
+        help="Execution backend. Defaults to 'claude' for new runs and preserves the existing backend when resuming.",
     )
     parser.add_argument(
         "--venue",
@@ -98,6 +106,23 @@ def parse_args() -> argparse.Namespace:
         help="Maximum seconds per stage attempt before timeout. Defaults to 14400 (4 hours).",
     )
     return parser.parse_args()
+
+
+def default_model_for_operator(operator_name: str) -> str:
+    return "default" if operator_name == "codex" else "sonnet"
+
+
+def create_operator(
+    operator_name: str,
+    *,
+    model: str,
+    fake_mode: bool,
+    ui: TerminalUI,
+    stage_timeout: int,
+) -> OperatorProtocol:
+    if operator_name == "codex":
+        return CodexOperator(model=model, fake_mode=fake_mode, ui=ui, stage_timeout=stage_timeout)
+    return ClaudeOperator(model=model, fake_mode=fake_mode, ui=ui, stage_timeout=stage_timeout)
 
 
 def resolve_stage(value: str | None) -> StageSpec | None:
@@ -185,10 +210,23 @@ def main() -> int:
         run_root = resolve_resume_run(runs_dir, args.resume_run)
         paths = build_run_paths(run_root)
         existing_config = load_run_config(paths)
+        existing_operator = str(existing_config.get("operator") or "claude").strip().lower()
+        operator_name = (args.operator or existing_config.get("operator") or "claude").strip().lower()
         existing_model = existing_config.get("model")
-        model = args.model or (existing_model if existing_model != "unknown" else None) or "sonnet"
+        if args.model:
+            model = args.model
+        elif args.operator and operator_name != existing_operator:
+            model = default_model_for_operator(operator_name)
+        else:
+            model = (existing_model if existing_model != "unknown" else None) or default_model_for_operator(operator_name)
         venue = resolve_venue_key(args.venue or existing_config["venue"])
-        operator = ClaudeOperator(model=model, fake_mode=args.fake_operator, ui=ui, stage_timeout=args.stage_timeout)
+        operator = create_operator(
+            operator_name,
+            model=model,
+            fake_mode=args.fake_operator,
+            ui=ui,
+            stage_timeout=args.stage_timeout,
+        )
         manager = ResearchManager(
             project_root=repo_root,
             runs_dir=runs_dir,
@@ -203,9 +241,16 @@ def main() -> int:
             research_diagram=args.research_diagram,
         ) else 1
 
-    model = args.model or "sonnet"
+    operator_name = (args.operator or "claude").strip().lower()
+    model = args.model or default_model_for_operator(operator_name)
     venue = resolve_venue_key(args.venue or DEFAULT_VENUE)
-    operator = ClaudeOperator(model=model, fake_mode=args.fake_operator, ui=ui, stage_timeout=args.stage_timeout)
+    operator = create_operator(
+        operator_name,
+        model=model,
+        fake_mode=args.fake_operator,
+        ui=ui,
+        stage_timeout=args.stage_timeout,
+    )
     manager = ResearchManager(
         project_root=repo_root,
         runs_dir=runs_dir,

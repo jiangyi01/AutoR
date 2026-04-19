@@ -21,7 +21,9 @@
 </p>
 
 <p align="center">
-  <a href="#overview">Overview</a>
+  <a href="#-overview">Overview</a>
+  ·
+  <a href="#-news">News</a>
   ·
   <a href="#-showcase">Showcase</a>
   ·
@@ -37,6 +39,13 @@
 </p>
 
 <p align="center">
+  <strong>Start Here:</strong>
+  <a href="docs/tutorial_en.md">English Guide</a>
+  ·
+  <a href="docs/tutorial_zh.md">中文教程</a>
+</p>
+
+<p align="center">
   <img src="assets/examples/example_fig6_two_layer.png" alt="AutoR example figure" width="92%" />
 </p>
 
@@ -47,13 +56,16 @@
 > It is a structured research harness over a coding agent execution layer:
 > **AI handles execution, humans own the direction, and every run becomes an inspectable research artifact on disk.**
 
-## Overview
+> New users should start with the step-by-step guides:
+> [English Guide](docs/tutorial_en.md) or [中文教程](docs/tutorial_zh.md).
+
+## 📖 Overview
 
 Most autoresearch systems optimize for autonomy.
 
 AutoR takes a different position: research is too important to hand over as a blind end-to-end loop. The goal is not to remove humans from research. The goal is to give them a stronger execution system.
 
-### At a Glance
+### ✨ At a Glance
 
 | Dimension | AutoR |
 | --- | --- |
@@ -64,7 +76,7 @@ AutoR takes a different position: research is too important to hand over as a bl
 | Quality bar | Artifact-backed outputs, not markdown-only summaries |
 | Recovery | Resume, redo-stage, rollback-stage, stage-local continuation |
 
-### Highlights
+### 🔦 Highlights
 
 | Layer | Highlight | What AutoR actually does |
 | --- | --- | --- |
@@ -81,7 +93,7 @@ AutoR takes a different position: research is too important to hand over as a bl
 
 In practice, that means AutoR is useful not only because of the high-level framing, but also because it handles real research chores: literature organization, experiment manifests, citation verification, artifact indexing, manuscript packaging, and recoverable long-running workflows.
 
-### What AutoR Guarantees
+### ✅ What AutoR Guarantees
 
 - Human approval is required before the workflow advances.
 - Approved summaries become the only cross-stage memory.
@@ -89,7 +101,7 @@ In practice, that means AutoR is useful not only because of the high-level frami
 - Later stages must produce real artifacts, not only prose.
 - A coding agent is the execution layer; AutoR is the research control loop above it.
 
-### Why AutoR?
+### 🤔 Why AutoR?
 
 Many systems aim to generate research outputs that *look* ready.
 
@@ -107,11 +119,21 @@ It is:
 
 > Can you verify every part of it?
 
+## 📰 News
+
+Latest mainline updates:
+
+- **2026-04-18**: Fixed a stage-summary recovery bug so local normalization now restores the required `Decision Ledger` section and validates draft outputs against the correct `.tmp.md` path. Added stage recovery controls that let operators `/skip` the current stage, `/back <stage>` to an earlier stage, or choose skip / roll back directly after retry exhaustion.
+- **2026-04-15**: Added minimal `--operator codex` support alongside Claude, persisted the selected execution backend in `run_config.json`, and improved terminal rendering for backend JSON streams.
+- **2026-04-13**: Added literature evidence ledgers and citation verification outputs, introduced typed hypothesis manifests, hardened experiment manifest parsing, and added regression coverage for research diagram injection.
+- **2026-04-10**: Added a decision ledger for human approvals and refined the public showcase gallery so research artifacts are presented more clearly.
+- **2026-04-08**: Documented optional `--research-diagram` dependencies and tightened the README positioning around human-centered, artifact-backed research execution.
+
 ## 🌟 Showcase
 
 AutoR already has a full example run used throughout the repository: `runs/20260330_101222`.
 
-### Example Run Snapshot
+### 🧪 Example Run Snapshot
 
 | What the run produced | What it demonstrates |
 | --- | --- |
@@ -127,7 +149,7 @@ Highlighted outcomes from that run:
 - The system produced a full research package with real figures, writing sources, and auditable artifacts.
 - The final run preserved the full human-in-the-loop approval trail.
 
-### Terminal Experience
+### 🖥️ Terminal Experience
 
 AutoR is designed for terminal-first execution, but the interaction layer is not limited to raw logs and plain prompts. The current UI supports banner-style startup, colored stage panels, parsed Claude event streams, wrapped markdown summaries, and a menu-driven approval loop suitable for demos and recordings.
 
@@ -135,7 +157,7 @@ AutoR is designed for terminal-first execution, but the interaction layer is not
   <img src="assets/terminal.png" alt="AutoR terminal UI" width="92%" />
 </p>
 
-### Example Figures
+### 📈 Example Figures
 
 <table>
   <tr>
@@ -156,7 +178,7 @@ AutoR is designed for terminal-first execution, but the interaction layer is not
   </tr>
 </table>
 
-### Research Output Gallery
+### 🧾 Research Output Gallery
 
 The manuscript pages below are only the visible surface of larger AutoR runs. To keep the showcase compact and comparable, this gallery uses a consistent 4 × 2 layout: four artifact-backed research outputs, two representative pages from each, and a short note on what each run is demonstrating.
 
@@ -219,7 +241,7 @@ The manuscript pages below are only the visible surface of larger AutoR runs. To
   </tr>
 </table>
 
-### Human-in-the-Loop in Practice
+### 🧑‍🔬 Human-in-the-Loop in Practice
 
 The example run is interesting not because the AI was left alone, but because the human intervened at critical moments:
 
@@ -233,24 +255,26 @@ AI handles execution load; humans steer the research when direction actually mat
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### 🧰 Prerequisites
 
 - Python 3.10+
-- Claude CLI available on `PATH` for real runs
+- Claude CLI or Codex CLI available on `PATH` for real runs
 - Local TeX tools are helpful for Stage 07, but not required for smoke tests
 - For `--research-diagram` (Gemini-generated method illustration inserted into the LaTeX paper):
   - `pip install google-genai` (the `google.genai` SDK is **not** a default dependency; if it is missing the diagram step prints `Diagram generation failed: No module named 'google'` and the rest of the run continues unaffected)
   - A Gemini API key exposed via `GOOGLE_API_KEY` or `GEMINI_API_KEY`, or a local `configs/diagram_config.yaml` (see `configs/diagram_config.template.yaml`)
 
-### Common Commands
+### ⌨️ Common Commands
 
 | Goal | Command |
 | --- | --- |
 | Start a new run | `python main.py` |
 | Start with an explicit goal | `python main.py --goal "Your research goal here"` |
 | Start with preloaded resources | `python main.py --goal "Your research goal here" --resources paper.pdf refs.bib data.csv` |
-| Run a local smoke test without Claude | `python main.py --fake-operator --goal "Smoke test"` |
-| Choose a Claude model | `python main.py --model sonnet` or `python main.py --model opus` |
+| Run a local smoke test without a real agent backend | `python main.py --fake-operator --goal "Smoke test"` |
+| Choose the execution backend | `python main.py --operator claude` or `python main.py --operator codex` |
+| Choose a Claude model | `python main.py --operator claude --model sonnet` or `python main.py --operator claude --model opus` |
+| Start with Codex | `python main.py --operator codex --model default --goal "Your research goal here"` |
 | Choose a writing venue profile | `python main.py --venue neurips_2025` or `python main.py --venue nature` or `python main.py --venue jmlr` |
 | Resume the latest run | `python main.py --resume-run latest` |
 | Redo a stage inside the same run | `python main.py --resume-run 20260329_210252 --redo-stage 03` |
@@ -478,7 +502,7 @@ For each stage attempt, AutoR assembles a prompt from:
 7. optional refinement feedback
 8. for continuation attempts, the current draft/final stage files and workspace context
 
-The assembled prompt is written to `runs/<run_id>/prompt_cache/`, per-stage session IDs are stored in `runs/<run_id>/operator_state/`, and Claude is invoked in live streaming mode.
+The assembled prompt is written to `runs/<run_id>/prompt_cache/`, per-stage session IDs are stored in `runs/<run_id>/operator_state/`, and the selected CLI backend is invoked in live streaming mode.
 
 <details>
 <summary><strong>Exact Claude CLI pattern</strong></summary>
@@ -512,7 +536,7 @@ claude --model <model> \
 Important behavior:
 
 - refinement attempts reuse the same stage conversation whenever possible
-- streamed Claude output is shown live in the terminal
+- streamed agent output is shown live in the terminal
 - raw stream-json output is captured in `logs_raw.jsonl`
 - if resume fails, AutoR can fall back to a fresh session
 - if stage markdown is incomplete, AutoR can repair or normalize it locally
@@ -552,7 +576,8 @@ File boundaries:
 
 - [main.py](main.py): CLI entry point. Starts a new run, resumes an existing run, collects resources, and exposes redo/rollback controls.
 - [src/manager.py](src/manager.py): Owns intake plus the 8-stage loop, approval flow, repair flow, resume/redo/rollback logic, and stage-level continuation policy.
-- [src/operator.py](src/operator.py): Invokes Claude CLI, streams output live, persists stage session state, resumes the same stage conversation for refinement, and falls back to a fresh session if resume fails.
+- [src/operator.py](src/operator.py): The shared CLI operator flow used by Claude today and reused by Codex support for stage session state, live streaming, and resume fallback.
+- [src/operator_codex.py](src/operator_codex.py): Codex CLI adapter over the same stage contract, including JSON event streaming and stage-local session continuation.
 - [src/intake.py](src/intake.py): Resource ingestion, intake context persistence, and prompt formatting for preloaded materials.
 - [src/manifest.py](src/manifest.py): Lightweight run lifecycle state, stage status tracking, and rollback/stale invalidation.
 - [src/artifact_index.py](src/artifact_index.py): Run-wide artifact indexing over data, results, and figures.

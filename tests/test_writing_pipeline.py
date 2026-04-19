@@ -138,6 +138,15 @@ class WritingPipelineTests(unittest.TestCase):
         ensure_run_config(paths, model="opus", venue="nature")
         config = load_run_config(paths)
         self.assertEqual(config["model"], "opus")
+        self.assertEqual(config["operator"], "claude")
+        self.assertEqual(config["venue"], "nature")
+
+    def test_run_config_persists_selected_operator(self) -> None:
+        _, paths = self._build_paths()
+        ensure_run_config(paths, model="default", operator="codex", venue="nature")
+        config = load_run_config(paths)
+        self.assertEqual(config["model"], "default")
+        self.assertEqual(config["operator"], "codex")
         self.assertEqual(config["venue"], "nature")
 
     def test_resume_without_explicit_venue_preserves_existing_run_config(self) -> None:
@@ -172,6 +181,42 @@ class WritingPipelineTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1, msg=result.stderr)
             config = load_run_config(paths)
             self.assertEqual(config["model"], "opus")
+            self.assertEqual(config["operator"], "claude")
+            self.assertEqual(config["venue"], "nature")
+
+    def test_resume_without_explicit_operator_preserves_existing_backend(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir = Path(tmp_dir) / "runs"
+            run_root = runs_dir / "codex_run"
+            paths = build_run_paths(run_root)
+            ensure_run_layout(paths)
+            write_text(paths.user_input, "Resume codex goal")
+            write_text(
+                paths.memory,
+                "# Approved Run Memory\n\n## Original User Goal\nResume codex\n\n## Approved Stage Summaries\n\n_None yet._\n",
+            )
+            ensure_run_config(paths, model="default", operator="codex", venue="nature")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "main.py",
+                    "--fake-operator",
+                    "--resume-run",
+                    "codex_run",
+                    "--runs-dir",
+                    str(runs_dir),
+                ],
+                cwd=REPO_ROOT,
+                input="6\n",
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertEqual(result.returncode, 1, msg=result.stderr)
+            config = load_run_config(paths)
+            self.assertEqual(config["model"], "default")
+            self.assertEqual(config["operator"], "codex")
             self.assertEqual(config["venue"], "nature")
 
     def test_resume_old_run_without_run_config_falls_back_to_sonnet(self) -> None:
@@ -205,6 +250,7 @@ class WritingPipelineTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1, msg=result.stderr)
             config = load_run_config(paths)
             self.assertEqual(config["model"], "sonnet")
+            self.assertEqual(config["operator"], "claude")
             self.assertEqual(config["venue"], DEFAULT_VENUE)
 
     def test_stage07_validation_does_not_accept_generic_journal_word_for_nature(self) -> None:

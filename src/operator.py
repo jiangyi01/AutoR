@@ -29,6 +29,8 @@ from .utils import (
 
 
 class ClaudeOperator:
+    backend_name = "claude"
+
     def __init__(
         self,
         command: str = "claude",
@@ -67,13 +69,18 @@ class ClaudeOperator:
     ) -> OperatorResult:
         if shutil.which(self.command) is None:
             raise FileNotFoundError(
-                f"Claude CLI not found: {self.command}. Install it or use --fake-operator."
+                f"{self._agent_label()} CLI not found: {self.command}. Install it or use --fake-operator."
             )
 
         prompt_path = paths.prompt_cache_dir / f"{stage.slug}_attempt_{attempt_no:02d}.prompt.md"
         write_text(prompt_path, prompt)
         session_id = self._resolve_stage_session_id(paths, stage, continue_session)
-        command = self._build_cli_command(prompt_path, session_id, resume=continue_session)
+        command, invocation_cwd, stdin_text = self._prepare_invocation(
+            prompt_path,
+            session_id,
+            paths=paths,
+            resume=continue_session,
+        )
         self._write_attempt_state(
             paths,
             stage,
@@ -104,11 +111,12 @@ class ClaudeOperator:
 
         exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = self._run_streaming_command(
             command=command,
-            cwd=paths.run_root,
+            cwd=invocation_cwd,
             stage=stage,
             attempt_no=attempt_no,
             paths=paths,
             mode="real_continue" if continue_session else "real_start",
+            stdin_text=stdin_text,
         )
         stage_file = paths.stage_tmp_file(stage)
 
@@ -119,7 +127,12 @@ class ClaudeOperator:
             and self._looks_like_resume_failure(stdout_text, stderr_text)
         ):
             fallback_session_id = str(uuid.uuid4())
-            fallback_command = self._build_cli_command(prompt_path, fallback_session_id, resume=False)
+            fallback_command, fallback_cwd, fallback_stdin_text = self._prepare_invocation(
+                prompt_path,
+                fallback_session_id,
+                paths=paths,
+                resume=False,
+            )
             append_jsonl(
                 paths.logs_raw,
                 {
@@ -137,11 +150,12 @@ class ClaudeOperator:
             self._mark_session_broken(paths, stage, session_id, reason="resume_failure")
             exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = self._run_streaming_command(
                 command=fallback_command,
-                cwd=paths.run_root,
+                cwd=fallback_cwd,
                 stage=stage,
                 attempt_no=attempt_no,
                 paths=paths,
                 mode="real_continue_fallback_start",
+                stdin_text=fallback_stdin_text,
             )
             session_id = fallback_session_id
 
@@ -265,17 +279,19 @@ Original stderr:
         write_text(recovery_prompt_path, recovery_prompt)
         session_id = self._resolve_stage_session_id(paths, stage, continue_session=True, allow_create=False)
         if session_id:
-            command = self._build_cli_command(
+            command, invocation_cwd, stdin_text = self._prepare_invocation(
                 recovery_prompt_path,
                 session_id,
+                paths=paths,
                 resume=True,
                 tools="Write,Read,Glob,Grep",
             )
         else:
             session_id = self._resolve_stage_session_id(paths, stage, continue_session=False)
-            command = self._build_cli_command(
+            command, invocation_cwd, stdin_text = self._prepare_invocation(
                 recovery_prompt_path,
                 session_id,
+                paths=paths,
                 resume=False,
                 tools="Write,Read,Glob,Grep",
             )
@@ -310,11 +326,12 @@ Original stderr:
 
         exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = self._run_streaming_command(
             command=command,
-            cwd=paths.run_root,
+            cwd=invocation_cwd,
             stage=stage,
             attempt_no=attempt_no,
             paths=paths,
             mode="repair",
+            stdin_text=stdin_text,
         )
         if (
             session_id
@@ -323,9 +340,10 @@ Original stderr:
             and self._looks_like_resume_failure(stdout_text, stderr_text)
         ):
             fallback_session_id = str(uuid.uuid4())
-            fallback_command = self._build_cli_command(
+            fallback_command, fallback_cwd, fallback_stdin_text = self._prepare_invocation(
                 recovery_prompt_path,
                 fallback_session_id,
+                paths=paths,
                 resume=False,
                 tools="Write,Read,Glob,Grep",
             )
@@ -346,11 +364,12 @@ Original stderr:
             self._mark_session_broken(paths, stage, session_id, reason="repair_resume_failure")
             exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = self._run_streaming_command(
                 command=fallback_command,
-                cwd=paths.run_root,
+                cwd=fallback_cwd,
                 stage=stage,
                 attempt_no=attempt_no,
                 paths=paths,
                 mode="repair_fallback_start",
+                stdin_text=fallback_stdin_text,
             )
             session_id = fallback_session_id
 
@@ -402,10 +421,12 @@ Original stderr:
         attempt_no: int,
         paths: RunPaths,
         mode: str,
+        stdin_text: str | None = None,
     ) -> tuple[int, str, str, str | None, dict[str, object]]:
         process = subprocess.Popen(
             command,
             cwd=str(cwd),
+            stdin=subprocess.PIPE if stdin_text is not None else None,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -413,7 +434,22 @@ Original stderr:
         )
 
         if process.stdout is None:
-            raise RuntimeError("Failed to capture Claude output stream.")
+            raise RuntimeError(f"Failed to capture {self._agent_label()} output stream.")
+        stdin_thread: threading.Thread | None = None
+        if stdin_text is not None and process.stdin is not None:
+            def _feed_stdin() -> None:
+                try:
+                    process.stdin.write(stdin_text)
+                except BrokenPipeError:
+                    pass
+                finally:
+                    try:
+                        process.stdin.close()
+                    except BrokenPipeError:
+                        pass
+
+            stdin_thread = threading.Thread(target=_feed_stdin, daemon=True)
+            stdin_thread.start()
 
         extracted_fragments: list[str] = []
         raw_lines: list[str] = []
@@ -496,6 +532,10 @@ Original stderr:
             raise
         finally:
             timer.cancel()
+            if stdin_thread is not None:
+                stdin_thread.join(timeout=1)
+            if process.stdin is not None and not process.stdin.closed:
+                process.stdin.close()
             process.stdout.close()
 
         if timed_out.is_set():
@@ -575,6 +615,7 @@ Original stderr:
         self._persist_stage_session_id(paths, stage, session_id)
         approved_memory = self._extract_approved_memory_from_prompt(prompt) or read_text(paths.memory)
         previous_summaries = approved_stage_summaries(approved_memory)
+        agent_label = self._agent_label()
         note_path = paths.notes_dir / f"{stage.slug}_fake_operator_note.md"
         stage_tmp_path = paths.stage_tmp_file(stage)
         user_goal = read_text(paths.user_input).strip()
@@ -584,7 +625,7 @@ Original stderr:
                 f"# Fake Operator Note: {stage.stage_title}\n\n"
                 "This file was produced by fake-operator mode to validate the workflow, "
                 "directory layout, stage summary handling, and approval loop without "
-                "calling Claude."
+                f"calling {agent_label}."
             ),
         )
 
@@ -647,7 +688,7 @@ Original stderr:
                 "## Previously Approved Stage Summaries\n"
                 f"{previous_summaries}\n\n"
                 "## What I Did\n"
-                "- Entered fake-operator mode so the full terminal workflow could be demonstrated without calling Claude.\n"
+                f"- Entered fake-operator mode so the full terminal workflow could be demonstrated without calling {agent_label}.\n"
                 "- Generated a short markdown introduction to AutoR for recording and smoke-test purposes.\n"
                 f"- Wrote overview material to `{relative_to_run(intro_path, paths.run_root)}` and preserved the fake operator note at `{relative_to_run(note_path, paths.run_root)}`.\n"
                 f"- Produced a valid stage summary draft at `{relative_to_run(stage_tmp_path, paths.run_root)}`.\n\n"
@@ -669,7 +710,7 @@ Original stderr:
                 "- **Assumptions**: The current terminal UI and approval loop are the main things being demonstrated.\n"
                 "- **Rejected Alternatives**: Treating the smoke test as a real research result.\n\n"
                 "## Suggestions for Refinement\n"
-                "1. Switch from fake mode to the real Claude operator and record a live stage execution.\n"
+                f"1. Switch from fake mode to the real {agent_label} operator and record a live stage execution.\n"
                 "2. Tune the terminal theme, colors, and screen layout for recording aesthetics.\n"
                 "3. Expand the intro note with a concrete example run and artifact tour before moving on.\n\n"
                 "## Your Options\n"
@@ -730,7 +771,7 @@ Original stderr:
                 "## Previously Approved Stage Summaries\n"
                 f"{previous_summaries}\n\n"
                 "## What I Did\n"
-                "- Executed fake-operator mode instead of invoking Claude.\n"
+                f"- Executed fake-operator mode instead of invoking {agent_label}.\n"
                 f"- Wrote supporting source and claim ledgers to `{relative_to_run(sources_path, paths.run_root)}` and `{relative_to_run(claims_path, paths.run_root)}`.\n"
                 f"- Preserved the fake operator note at `{relative_to_run(note_path, paths.run_root)}`.\n"
                 "- Produced a valid Stage 01 summary with traceable survey artifacts.\n\n"
@@ -781,7 +822,7 @@ Original stderr:
                 "## Previously Approved Stage Summaries\n"
                 f"{previous_summaries}\n\n"
                 "## What I Did\n"
-                "- Executed fake-operator mode instead of invoking Claude.\n"
+                f"- Executed fake-operator mode instead of invoking {agent_label}.\n"
                 f"- Wrote supporting hypothesis notes to `{relative_to_run(hypotheses_path, paths.run_root)}`.\n"
                 f"- Preserved the fake operator note at `{relative_to_run(note_path, paths.run_root)}`.\n"
                 "- Produced a typed Stage 02 summary so downstream stages can consume structured hypothesis context.\n\n"
@@ -827,7 +868,7 @@ Original stderr:
                 "## Previously Approved Stage Summaries\n"
                 f"{previous_summaries}\n\n"
                 "## What I Did\n"
-                "- Executed fake-operator mode instead of invoking Claude.\n"
+                f"- Executed fake-operator mode instead of invoking {agent_label}.\n"
                 f"- Created a placeholder artifact at `{relative_to_run(note_path, paths.run_root)}`.\n"
                 f"- Simulated a complete stage attempt for `{stage.slug}`.\n\n"
                 "## Key Results\n"
@@ -843,7 +884,7 @@ Original stderr:
                 "- **Assumptions**: This smoke run is only validating workflow mechanics.\n"
                 "- **Rejected Alternatives**: Treating placeholder artifacts as real research deliverables.\n\n"
                 "## Suggestions for Refinement\n"
-                "1. Replace fake mode with the real Claude operator and inspect the resulting artifacts.\n"
+                f"1. Replace fake mode with the real {agent_label} operator and inspect the resulting artifacts.\n"
                 "2. Tighten the stage prompt to better reflect the target of actual publication-grade work.\n"
                 "3. Add stronger expectations for the concrete artifacts and files outputs from this stage.\n\n"
                 "## Your Options\n"
@@ -931,7 +972,25 @@ Original stderr:
         value = payload.get("session_id")
         if isinstance(value, str) and value.strip():
             return value.strip()
+        value = payload.get("thread_id")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
         return None
+
+    def _prepare_invocation(
+        self,
+        prompt_path: Path,
+        session_id: str,
+        *,
+        paths: RunPaths,
+        resume: bool,
+        tools: str | None = None,
+    ) -> tuple[list[str], Path, str | None]:
+        return (
+            self._build_cli_command(prompt_path, session_id, resume=resume, tools=tools),
+            paths.run_root,
+            None,
+        )
 
     def _build_cli_command(
         self,
@@ -971,6 +1030,8 @@ Original stderr:
         return (
             "no conversation found with session id" in combined
             or ("resume" in combined and "not found" in combined)
+            or "no rollout found for thread id" in combined
+            or ("thread/resume" in combined and "no rollout found" in combined)
         )
 
     def _write_attempt_state(
@@ -1015,3 +1076,6 @@ Original stderr:
 
     def _now(self) -> str:
         return datetime.now().isoformat(timespec="seconds")
+
+    def _agent_label(self) -> str:
+        return "Codex" if self.backend_name == "codex" else "Claude"

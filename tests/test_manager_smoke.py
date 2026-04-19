@@ -5,7 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from src.manager import ResearchManager
 from src.manifest import load_run_manifest
@@ -556,6 +556,53 @@ class ManagerSmokeTests(unittest.TestCase):
             entry = next(item for item in manifest.stages if item.slug == STAGE_01.slug)
             self.assertTrue(entry.approved)
             self.assertEqual(entry.attempt_count, 2)
+
+    def test_stage_can_be_skipped_after_exhausted_retries(self) -> None:
+        class DummyTTY:
+            def isatty(self) -> bool:
+                return True
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _, _, manager = self._build_manager(tmp_dir)
+            paths = manager._create_run("Smoke-test stage skip recovery.", venue="neurips_2025")
+            manager.ui.input_stream = DummyTTY()
+            manager.ui.read_single_line = MagicMock(return_value="1")
+
+            with patch("src.manager.MAX_STAGE_ATTEMPTS", 0):
+                approved = manager._run_stage(paths, STAGE_01)
+
+            self.assertTrue(approved)
+            stage_markdown = read_text(paths.stage_file(STAGE_01))
+            self.assertIn("intentionally skipped", stage_markdown)
+            manifest = load_run_manifest(paths.run_manifest)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+            entry = next(item for item in manifest.stages if item.slug == STAGE_01.slug)
+            self.assertTrue(entry.approved)
+
+    def test_back_command_rolls_run_to_earlier_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _, _, manager = self._build_manager(tmp_dir)
+            paths = manager._create_run("Smoke-test /back command handling.", venue="neurips_2025")
+
+            with patch.object(manager, "_ask_choice", return_value="5"):
+                self.assertTrue(manager._run_stage(paths, STAGE_01))
+
+            handled = manager._handle_stage_control_command(
+                paths=paths,
+                stage=STAGES[1],
+                attempt_no=1,
+                command_text="/back 01",
+            )
+
+            self.assertTrue(handled)
+            self.assertEqual(manager._jump_target_stage, STAGE_01)
+            manifest = load_run_manifest(paths.run_manifest)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+            stage01_entry = next(item for item in manifest.stages if item.slug == STAGE_01.slug)
+            self.assertFalse(stage01_entry.approved)
+            self.assertEqual(stage01_entry.status, "pending")
 
     def test_revision_delta_uses_repaired_draft_and_is_stripped_before_promotion(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

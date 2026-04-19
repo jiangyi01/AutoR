@@ -158,6 +158,13 @@ class TestResumeFailureDetection(unittest.TestCase):
             )
         )
 
+    def test_codex_thread_resume_not_found_detected(self) -> None:
+        self.assertTrue(
+            self.op._looks_like_resume_failure(
+                "thread/resume failed: no rollout found for thread id abc", ""
+            )
+        )
+
     def test_operator_precedence_fix(self) -> None:
         # Before the fix, this would incorrectly return True because
         # `"resume" in combined and "not found" in combined` was evaluated
@@ -231,6 +238,7 @@ class TestStageTimeout(unittest.TestCase):
         class FakeProcess:
             def __init__(self) -> None:
                 self.stdout = FakeStdout()
+                self.stdin = None
 
             def terminate(self) -> None:
                 return None
@@ -299,6 +307,7 @@ class TestStreamingRendering(unittest.TestCase):
         class FakeProcess:
             def __init__(self, lines: list[str]) -> None:
                 self.stdout = FakeStdout(lines)
+                self.stdin = None
 
             def terminate(self) -> None:
                 return None
@@ -363,6 +372,91 @@ class TestStreamingRendering(unittest.TestCase):
             self.assertEqual(output.getvalue(), "")
             self.assertEqual(ui.raw_lines, [])
             self.assertEqual(len(ui.events), 1)
+
+    def test_codex_json_stream_is_rendered_without_raw_json_dump(self) -> None:
+        class FakeStdout:
+            def __init__(self, lines: list[str]) -> None:
+                self._lines = iter(lines)
+
+            def __iter__(self):
+                return self
+
+            def __next__(self) -> str:
+                return next(self._lines)
+
+            def close(self) -> None:
+                return None
+
+        class FakeProcess:
+            def __init__(self, lines: list[str]) -> None:
+                self.stdout = FakeStdout(lines)
+                self.stdin = None
+
+            def terminate(self) -> None:
+                return None
+
+            def wait(self, timeout=None) -> int:
+                return 0
+
+            def kill(self) -> None:
+                return None
+
+        class NoopTimer:
+            def __init__(self, timeout, fn) -> None:
+                self.daemon = False
+
+            def start(self) -> None:
+                return None
+
+            def cancel(self) -> None:
+                return None
+
+        class RecordingUI:
+            def __init__(self) -> None:
+                self.events: list[tuple[dict[str, object], dict[str, str]]] = []
+                self.raw_lines: list[str] = []
+
+            def show_stream_event(self, payload, tool_names) -> None:
+                self.events.append((payload, dict(tool_names)))
+
+            def show_raw_stream_line(self, line: str) -> None:
+                self.raw_lines.append(line)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = build_run_paths(Path(tmp) / "run")
+            ensure_run_layout(paths)
+            write_text(paths.user_input, "codex json stream goal")
+            initialize_memory(paths, "codex json stream goal")
+            output = io.StringIO()
+            ui = RecordingUI()
+            op = ClaudeOperator(fake_mode=False, output_stream=output, ui=ui)
+            lines = [
+                '{"type":"thread.started","thread_id":"thread-1"}\n',
+                '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"hello from codex"}}\n',
+                '{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":3}}\n',
+            ]
+
+            with patch("src.operator.subprocess.Popen", return_value=FakeProcess(lines)), patch(
+                "src.operator.threading.Timer",
+                NoopTimer,
+            ):
+                exit_code, stdout_text, stderr_text, observed_session_id, stream_meta = op._run_streaming_command(
+                    command=["codex"],
+                    cwd=paths.run_root,
+                    stage=STAGE_01,
+                    attempt_no=1,
+                    paths=paths,
+                    mode="real_start",
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stderr_text, "")
+            self.assertEqual(observed_session_id, "thread-1")
+            self.assertIn("hello from codex", stdout_text)
+            self.assertEqual(stream_meta["malformed_json_count"], 0)
+            self.assertEqual(output.getvalue(), "")
+            self.assertEqual(ui.raw_lines, [])
+            self.assertEqual(len(ui.events), 3)
 
 
 class TestFakeOperatorAttemptContinuity(unittest.TestCase):

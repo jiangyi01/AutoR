@@ -258,10 +258,16 @@ def initialize_memory(paths: RunPaths, user_goal: str, intake_summary: str | Non
     write_text(paths.memory, build_memory_text(user_goal, [], intake_summary=intake_summary))
 
 
-def initialize_run_config(paths: RunPaths, model: str, venue: str | None = None) -> dict[str, Any]:
+def initialize_run_config(
+    paths: RunPaths,
+    model: str,
+    venue: str | None = None,
+    operator: str = "claude",
+) -> dict[str, Any]:
     selected_venue = resolve_venue_key(venue)
     config = {
         "model": model,
+        "operator": operator.strip().lower() if operator.strip() else "claude",
         "venue": selected_venue,
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
@@ -271,20 +277,22 @@ def initialize_run_config(paths: RunPaths, model: str, venue: str | None = None)
 
 def load_run_config(paths: RunPaths) -> dict[str, Any]:
     if not paths.run_config.exists():
-        return {"model": "unknown", "venue": DEFAULT_VENUE}
+        return {"model": "unknown", "operator": "claude", "venue": DEFAULT_VENUE}
 
     try:
         payload = json.loads(read_text(paths.run_config))
     except json.JSONDecodeError:
-        return {"model": "unknown", "venue": DEFAULT_VENUE}
+        return {"model": "unknown", "operator": "claude", "venue": DEFAULT_VENUE}
 
     if not isinstance(payload, dict):
-        return {"model": "unknown", "venue": DEFAULT_VENUE}
+        return {"model": "unknown", "operator": "claude", "venue": DEFAULT_VENUE}
 
     model = payload.get("model")
+    operator = payload.get("operator")
     venue = payload.get("venue")
     config = {
         "model": model if isinstance(model, str) and model.strip() else "unknown",
+        "operator": operator.strip().lower() if isinstance(operator, str) and operator.strip() else "claude",
         "venue": resolve_venue_key(venue if isinstance(venue, str) else None),
     }
     created_at = payload.get("created_at")
@@ -296,6 +304,7 @@ def load_run_config(paths: RunPaths) -> dict[str, Any]:
 def save_run_config(paths: RunPaths, config: dict[str, Any]) -> None:
     normalized = {
         "model": str(config.get("model") or "unknown"),
+        "operator": str(config.get("operator") or "claude").strip().lower() or "claude",
         "venue": resolve_venue_key(str(config.get("venue") or DEFAULT_VENUE)),
     }
     created_at = config.get("created_at")
@@ -306,10 +315,16 @@ def save_run_config(paths: RunPaths, config: dict[str, Any]) -> None:
     write_text(paths.run_config, json.dumps(normalized, indent=2, ensure_ascii=False))
 
 
-def ensure_run_config(paths: RunPaths, model: str | None = None, venue: str | None = None) -> dict[str, Any]:
+def ensure_run_config(
+    paths: RunPaths,
+    model: str | None = None,
+    venue: str | None = None,
+    operator: str | None = None,
+) -> dict[str, Any]:
     current = load_run_config(paths)
     updated = {
         "model": model or current.get("model") or "unknown",
+        "operator": operator or current.get("operator") or "claude",
         "venue": resolve_venue_key(venue or current.get("venue")),
         "created_at": current.get("created_at") or datetime.now().isoformat(timespec="seconds"),
     }
@@ -692,13 +707,13 @@ def validate_stage_markdown(
                         + ", ".join(f"`{path}`" for path in missing_files)
                     )
         elif heading == "Decision Ledger":
-            required_markers = [
-                "**Open Questions**",
-                "**Locked Decisions**",
-                "**Assumptions**",
-                "**Rejected Alternatives**",
+            required_keywords = [
+                "Open Questions",
+                "Locked Decisions",
+                "Assumptions",
+                "Rejected Alternatives",
             ]
-            if any(marker not in section for marker in required_markers):
+            if any(keyword not in section for keyword in required_keywords):
                 problems.append(
                     "Section 'Decision Ledger' must include Open Questions, Locked Decisions, "
                     "Assumptions, and Rejected Alternatives."
@@ -1389,6 +1404,7 @@ def canonicalize_stage_markdown(
     memory_text: str,
     markdown: str,
     fallback_text: str = "",
+    stage_output_path: str | None = None,
 ) -> str:
     objective = (
         extract_markdown_section(markdown, "Objective")
@@ -1422,7 +1438,7 @@ def canonicalize_stage_markdown(
     files_produced = extract_markdown_section(markdown, "Files Produced")
     if not files_produced:
         file_refs = _extract_path_references(markdown + "\n" + fallback_text)
-        stage_path = f"stages/{stage.filename}"
+        stage_path = stage_output_path or f"stages/{stage.filename}"
         if stage_path not in file_refs:
             file_refs.insert(0, stage_path)
         files_produced = "\n".join(f"- `{path}`" for path in file_refs[:12]) if file_refs else f"- `{stage_path}`"
@@ -1446,10 +1462,10 @@ def canonicalize_stage_markdown(
     decision_ledger = extract_markdown_section(markdown, "Decision Ledger")
     if not decision_ledger:
         decision_ledger = (
-            "- **Open Questions**: (auto-filled by canonicalization — review before approving)\n"
-            "- **Locked Decisions**: None recorded in this attempt.\n"
-            "- **Assumptions**: None explicitly stated.\n"
-            "- **Rejected Alternatives**: None recorded."
+            "### Open Questions\n\n_None identified._\n\n"
+            "### Locked Decisions\n\n_None yet._\n\n"
+            "### Assumptions\n\n_None yet._\n\n"
+            "### Rejected Alternatives\n\n_None yet._"
         )
 
     return (

@@ -91,6 +91,18 @@ class TerminalUI:
         tool_names: dict[str, str],
     ) -> None:
         event_type = payload.get("type")
+        if event_type == "thread.started":
+            self._render_codex_thread_started(payload)
+            return
+        if event_type in {"item.started", "item.completed"}:
+            self._render_codex_item_event(payload, tool_names)
+            return
+        if event_type == "turn.completed":
+            self._render_codex_turn_completed(payload)
+            return
+        if event_type == "error":
+            self._render_codex_error(payload)
+            return
         if event_type == "system":
             self._render_system_event(payload)
             return
@@ -109,7 +121,7 @@ class TerminalUI:
         self.panel(title, delta_text.rstrip().splitlines(), color=self.FG_YELLOW)
 
     def show_raw_stream_line(self, line: str) -> None:
-        self.panel("Claude Raw Output", [line], color=self.FG_YELLOW)
+        self.panel("Agent Raw Output", [line], color=self.FG_YELLOW)
 
     def choose_action(self, suggestions: list[str]) -> str:
         options = [
@@ -275,6 +287,72 @@ class TerminalUI:
             f"Code ver.   : {version}",
         ]
         self.panel("Claude Session Ready", body, color=self.FG_CYAN)
+
+    def _render_codex_thread_started(self, payload: dict[str, Any]) -> None:
+        thread_id = str(payload.get("thread_id") or "unknown")
+        self.panel("Codex Session Ready", [f"Thread ID   : {thread_id}"], color=self.FG_CYAN)
+
+    def _render_codex_item_event(
+        self,
+        payload: dict[str, Any],
+        tool_names: dict[str, str],
+    ) -> None:
+        item = payload.get("item")
+        if not isinstance(item, dict):
+            return
+        item_type = str(item.get("type") or "")
+        event_type = str(payload.get("type") or "")
+        item_id = str(item.get("id") or "")
+
+        if item_type == "agent_message" and event_type == "item.completed":
+            text = str(item.get("text") or "").strip()
+            if text:
+                self.panel("Codex Response", self._truncate_text_block(text, max_chars=1800), color=self.FG_GREEN)
+            return
+
+        if item_type != "command_execution":
+            return
+
+        tool_names[item_id] = "Bash"
+        command = str(item.get("command") or "").strip()
+        if event_type == "item.started":
+            self.panel(
+                "Tool Call | Bash",
+                [f"Command: {self._truncate(command, 260)}"],
+                color=self.FG_BLUE,
+            )
+            return
+
+        output = str(item.get("aggregated_output") or "").strip()
+        exit_code = item.get("exit_code")
+        body = [f"Command: {self._truncate(command, 260)}"]
+        if exit_code is not None:
+            body.append(f"Exit code: {exit_code}")
+        if output:
+            body.append(f"Output  : {self._truncate(output, 420)}")
+        self.panel(
+            "Tool Result | Bash",
+            body,
+            color=self.FG_RED if exit_code not in {0, None} else self.FG_YELLOW,
+        )
+
+    def _render_codex_turn_completed(self, payload: dict[str, Any]) -> None:
+        usage = payload.get("usage")
+        if not isinstance(usage, dict):
+            self.panel("Codex Finished", ["Turn completed."], color=self.FG_GREEN)
+            return
+        body = [
+            f"Input tokens  : {usage.get('input_tokens', 'unknown')}",
+            f"Cached input  : {usage.get('cached_input_tokens', 'unknown')}",
+            f"Output tokens : {usage.get('output_tokens', 'unknown')}",
+        ]
+        self.panel("Codex Finished", body, color=self.FG_GREEN)
+
+    def _render_codex_error(self, payload: dict[str, Any]) -> None:
+        message = str(payload.get("message") or "").strip()
+        if not message:
+            return
+        self.panel("Codex Status", [self._truncate(message, 420)], color=self.FG_YELLOW)
 
     def _render_assistant_event(
         self,
