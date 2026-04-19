@@ -308,6 +308,49 @@ Its purpose is only to check:
 
 Do not mistake a smoke test for a real research run.
 
+### 6.4 Optional: Use AutoR Studio in the Browser
+
+If you prefer approving stages, reading the paper, and watching progress from a browser, you can use **AutoR Studio** instead of staying in the terminal the whole time.
+
+Start it with:
+
+```bash
+python studio.py
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000/studio/
+```
+
+Studio is useful when you want to:
+
+- review stage outputs in a browser instead of a terminal panel
+- approve or send feedback with a clearer visual workflow
+- inspect the paper, LaTeX sources, and build log in one place
+- browse version history and session traces during a long run
+- record a cleaner demo than a pure terminal session
+
+The most important thing to understand is that **Studio is not a separate workflow**.
+
+It uses the same run directories, the same stage summaries, the same manifests, and the same artifact layout under `runs/<run_id>/`. In other words:
+
+- terminal mode and Studio are two interfaces over the same research system
+- the browser UI does not create a second hidden project format
+- what you see in Studio should still exist on disk in the run directory
+
+Current limitation:
+
+- Studio is currently **Claude-backed**
+- the terminal workflow supports both `claude` and `codex`
+- so if you need Codex today, use `python main.py`
+
+Good rule of thumb:
+
+- use `python main.py` when you want the most direct, scriptable, backend-flexible workflow
+- use `python studio.py` when you want a more visual approval, review, and demo experience
+
 ---
 
 ## 7. Step Four: Use Explicit Flags When You Need Fixed Configuration

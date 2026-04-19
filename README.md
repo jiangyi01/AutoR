@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  A terminal-first research harness that turns long, messy research work into reproducible, artifact-backed runs.
+  A terminal-first research harness, with a local browser Studio, that turns long, messy research work into reproducible, artifact-backed runs.
 </p>
 
 <p align="center">
@@ -123,6 +123,7 @@ It is:
 
 Latest mainline updates:
 
+- **2026-04-19**: Merged **AutoR Studio** into main: a local browser workspace for the same run-based workflow, with live stage monitoring, human review, restart-safe recovery, paper preview, version history, and a Notebook view. The browser UI shares the same run directories and artifact model as the terminal workflow and is currently Claude-backed.
 - **2026-04-18**: Fixed a stage-summary recovery bug so local normalization now restores the required `Decision Ledger` section and validates draft outputs against the correct `.tmp.md` path. Added stage recovery controls that let operators `/skip` the current stage, `/back <stage>` to an earlier stage, or choose skip / roll back directly after retry exhaustion.
 - **2026-04-15**: Added minimal `--operator codex` support alongside Claude, persisted the selected execution backend in `run_config.json`, and improved terminal rendering for backend JSON streams.
 - **2026-04-13**: Added literature evidence ledgers and citation verification outputs, introduced typed hypothesis manifests, hardened experiment manifest parsing, and added regression coverage for research diagram injection.
