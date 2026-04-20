@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from src.approval_agent import ReviewDecision
 from src.manager import ResearchManager
 from src.manifest import load_run_manifest
 from src.project_bootstrap import StageAssessment
@@ -488,6 +489,18 @@ class RepairingRevisionDeltaOperator(ScriptedSmokeOperator):
         )
 
 
+class ScriptedReviewer:
+    def __init__(self, decisions: list[ReviewDecision]) -> None:
+        self.decisions = list(decisions)
+        self.calls = 0
+
+    def review_stage(self, **_: object) -> ReviewDecision:
+        self.calls += 1
+        if self.decisions:
+            return self.decisions.pop(0)
+        return ReviewDecision(choice="5", decision_token="approve", reason="default scripted approval")
+
+
 class ManagerSmokeTests(unittest.TestCase):
     def _run_roots(self, runs_dir: Path) -> list[Path]:
         return sorted(path for path in runs_dir.iterdir() if path.is_dir())
@@ -556,6 +569,44 @@ class ManagerSmokeTests(unittest.TestCase):
             entry = next(item for item in manifest.stages if item.slug == STAGE_01.slug)
             self.assertTrue(entry.approved)
             self.assertEqual(entry.attempt_count, 2)
+
+    def test_automated_reviewer_can_drive_refine_then_approve(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir = Path(tmp_dir) / "runs"
+            operator = ScriptedSmokeOperator()
+            reviewer = ScriptedReviewer(
+                [
+                    ReviewDecision(
+                        choice="4",
+                        decision_token="custom_feedback",
+                        reason="Need a sharper evidence bar.",
+                        feedback="Strengthen the survey note so the stage is less toy and more traceable.",
+                    ),
+                    ReviewDecision(
+                        choice="5",
+                        decision_token="approve",
+                        reason="The revised stage is now acceptable.",
+                    ),
+                ]
+            )
+            manager = ResearchManager(
+                project_root=REPO_ROOT,
+                runs_dir=runs_dir,
+                operator=operator,
+                output_stream=io.StringIO(),
+                reviewer=reviewer,
+                approval_mode="agent",
+                review_operator="claude",
+                review_model="sonnet",
+            )
+            paths = manager._create_run("Smoke-test automated approval mode.", venue="neurips_2025")
+
+            approved = manager._run_stage(paths, STAGE_01)
+
+            self.assertTrue(approved)
+            self.assertEqual(reviewer.calls, 2)
+            self.assertEqual(operator.continue_modes[STAGE_01.slug], [False, True])
+            self.assertIn("Invocation marker: 2", read_text(paths.stage_file(STAGE_01)))
 
     def test_stage_can_be_skipped_after_exhausted_retries(self) -> None:
         class DummyTTY:

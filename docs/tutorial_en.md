@@ -381,6 +381,33 @@ Useful defaults to remember:
 - for a new run, Claude defaults to `sonnet` and Codex defaults to `default`
 - when resuming a run, AutoR preserves the existing backend, model, and venue unless you explicitly override them
 
+If you want a fully unattended approval path, you can enable the automated reviewer gate:
+
+```bash
+python main.py \
+  --operator claude \
+  --model sonnet \
+  --full-auto \
+  --goal "..."
+```
+
+You can also separate the execution backend from the reviewer backend:
+
+```bash
+python main.py \
+  --operator codex \
+  --model default \
+  --full-auto \
+  --review-operator claude \
+  --review-model opus \
+  --goal "..."
+```
+
+Two boundaries matter here:
+
+- `--full-auto` does **not** change the main research pipeline; it only swaps the manual approval gate for a strict reviewer agent
+- for serious research work, the default human-reviewed mode is still the recommended path; `--full-auto` is more useful for unattended sweeps, overnight dry runs, or pipeline pressure tests
+
 ### 7.2 Choose the Venue Early
 
 If you already know the target writing style, set the venue from the beginning:

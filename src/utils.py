@@ -263,12 +263,27 @@ def initialize_run_config(
     model: str,
     venue: str | None = None,
     operator: str = "claude",
+    approval_mode: str = "manual",
+    review_operator: str | None = None,
+    review_model: str | None = None,
 ) -> dict[str, Any]:
+    normalized_operator = operator.strip().lower() if operator.strip() else "claude"
+    normalized_review_operator = (
+        review_operator.strip().lower()
+        if isinstance(review_operator, str) and review_operator.strip()
+        else normalized_operator
+    )
     selected_venue = resolve_venue_key(venue)
     config = {
         "model": model,
-        "operator": operator.strip().lower() if operator.strip() else "claude",
+        "operator": normalized_operator,
         "venue": selected_venue,
+        "approval_mode": "agent" if approval_mode == "agent" else "manual",
+        "review_operator": normalized_review_operator,
+        "review_model": str(
+            review_model
+            or ("default" if normalized_review_operator == "codex" else "sonnet")
+        ),
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
     write_text(paths.run_config, json.dumps(config, indent=2, ensure_ascii=False))
@@ -277,23 +292,60 @@ def initialize_run_config(
 
 def load_run_config(paths: RunPaths) -> dict[str, Any]:
     if not paths.run_config.exists():
-        return {"model": "unknown", "operator": "claude", "venue": DEFAULT_VENUE}
+        return {
+            "model": "unknown",
+            "operator": "claude",
+            "venue": DEFAULT_VENUE,
+            "approval_mode": "manual",
+            "review_operator": "claude",
+            "review_model": "sonnet",
+        }
 
     try:
         payload = json.loads(read_text(paths.run_config))
     except json.JSONDecodeError:
-        return {"model": "unknown", "operator": "claude", "venue": DEFAULT_VENUE}
+        return {
+            "model": "unknown",
+            "operator": "claude",
+            "venue": DEFAULT_VENUE,
+            "approval_mode": "manual",
+            "review_operator": "claude",
+            "review_model": "sonnet",
+        }
 
     if not isinstance(payload, dict):
-        return {"model": "unknown", "operator": "claude", "venue": DEFAULT_VENUE}
+        return {
+            "model": "unknown",
+            "operator": "claude",
+            "venue": DEFAULT_VENUE,
+            "approval_mode": "manual",
+            "review_operator": "claude",
+            "review_model": "sonnet",
+        }
 
     model = payload.get("model")
     operator = payload.get("operator")
     venue = payload.get("venue")
+    normalized_operator = operator.strip().lower() if isinstance(operator, str) and operator.strip() else "claude"
+    review_operator = payload.get("review_operator")
+    normalized_review_operator = (
+        review_operator.strip().lower()
+        if isinstance(review_operator, str) and review_operator.strip()
+        else normalized_operator
+    )
+    review_model = payload.get("review_model")
+    approval_mode = payload.get("approval_mode")
     config = {
         "model": model if isinstance(model, str) and model.strip() else "unknown",
-        "operator": operator.strip().lower() if isinstance(operator, str) and operator.strip() else "claude",
+        "operator": normalized_operator,
         "venue": resolve_venue_key(venue if isinstance(venue, str) else None),
+        "approval_mode": "agent" if approval_mode == "agent" else "manual",
+        "review_operator": normalized_review_operator,
+        "review_model": (
+            review_model.strip()
+            if isinstance(review_model, str) and review_model.strip()
+            else ("default" if normalized_review_operator == "codex" else "sonnet")
+        ),
     }
     created_at = payload.get("created_at")
     if isinstance(created_at, str) and created_at.strip():
@@ -302,10 +354,20 @@ def load_run_config(paths: RunPaths) -> dict[str, Any]:
 
 
 def save_run_config(paths: RunPaths, config: dict[str, Any]) -> None:
+    normalized_operator = str(config.get("operator") or "claude").strip().lower() or "claude"
+    normalized_review_operator = str(
+        config.get("review_operator") or normalized_operator
+    ).strip().lower() or normalized_operator
     normalized = {
         "model": str(config.get("model") or "unknown"),
-        "operator": str(config.get("operator") or "claude").strip().lower() or "claude",
+        "operator": normalized_operator,
         "venue": resolve_venue_key(str(config.get("venue") or DEFAULT_VENUE)),
+        "approval_mode": "agent" if config.get("approval_mode") == "agent" else "manual",
+        "review_operator": normalized_review_operator,
+        "review_model": str(
+            config.get("review_model")
+            or ("default" if normalized_review_operator == "codex" else "sonnet")
+        ),
     }
     created_at = config.get("created_at")
     if isinstance(created_at, str) and created_at.strip():
@@ -320,12 +382,22 @@ def ensure_run_config(
     model: str | None = None,
     venue: str | None = None,
     operator: str | None = None,
+    approval_mode: str | None = None,
+    review_operator: str | None = None,
+    review_model: str | None = None,
 ) -> dict[str, Any]:
     current = load_run_config(paths)
+    effective_operator = operator or current.get("operator") or "claude"
+    effective_review_operator = review_operator or current.get("review_operator") or effective_operator
     updated = {
         "model": model or current.get("model") or "unknown",
-        "operator": operator or current.get("operator") or "claude",
+        "operator": effective_operator,
         "venue": resolve_venue_key(venue or current.get("venue")),
+        "approval_mode": approval_mode or current.get("approval_mode") or "manual",
+        "review_operator": effective_review_operator,
+        "review_model": review_model or current.get("review_model") or (
+            "default" if effective_review_operator == "codex" else "sonnet"
+        ),
         "created_at": current.get("created_at") or datetime.now().isoformat(timespec="seconds"),
     }
     save_run_config(paths, updated)

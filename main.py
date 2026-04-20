@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from src.approval_agent import AutomatedReviewer
 from src.intake import ResourceEntry, classify_resource, collect_resource_paths_from_ui
 from src.manager import ResearchManager
 from src.operator import ClaudeOperator
@@ -48,6 +49,25 @@ def parse_args() -> argparse.Namespace:
         "--operator",
         choices=["claude", "codex"],
         help="Execution backend. Defaults to 'claude' for new runs and preserves the existing backend when resuming.",
+    )
+    parser.add_argument(
+        "--approval-mode",
+        choices=["manual", "agent"],
+        help="Approval controller. Defaults to manual and preserves the existing run setting when resuming.",
+    )
+    parser.add_argument(
+        "--full-auto",
+        action="store_true",
+        help="Shortcut for --approval-mode agent. AutoR will use a strict reviewer agent instead of waiting for manual approval.",
+    )
+    parser.add_argument(
+        "--review-operator",
+        choices=["claude", "codex"],
+        help="Backend used by the automated reviewer. Defaults to the execution backend.",
+    )
+    parser.add_argument(
+        "--review-model",
+        help="Model alias or full model name for the automated reviewer backend. Defaults to the reviewer backend default.",
     )
     parser.add_argument(
         "--venue",
@@ -123,6 +143,23 @@ def create_operator(
     if operator_name == "codex":
         return CodexOperator(model=model, fake_mode=fake_mode, ui=ui, stage_timeout=stage_timeout)
     return ClaudeOperator(model=model, fake_mode=fake_mode, ui=ui, stage_timeout=stage_timeout)
+
+
+def create_reviewer(
+    backend_name: str,
+    *,
+    model: str,
+    fake_mode: bool,
+    ui: TerminalUI,
+    stage_timeout: int,
+) -> AutomatedReviewer:
+    return AutomatedReviewer(
+        backend_name,
+        model=model,
+        fake_mode=fake_mode,
+        ui=ui,
+        stage_timeout=stage_timeout,
+    )
 
 
 def resolve_stage(value: str | None) -> StageSpec | None:
@@ -219,6 +256,17 @@ def main() -> int:
             model = default_model_for_operator(operator_name)
         else:
             model = (existing_model if existing_model != "unknown" else None) or default_model_for_operator(operator_name)
+        approval_mode = "agent" if args.full_auto else (args.approval_mode or existing_config.get("approval_mode") or "manual")
+        review_operator = (args.review_operator or existing_config.get("review_operator") or operator_name).strip().lower()
+        existing_review_model = existing_config.get("review_model")
+        if args.review_model:
+            review_model = args.review_model
+        elif args.review_operator:
+            review_model = default_model_for_operator(review_operator)
+        else:
+            review_model = (
+                existing_review_model if existing_review_model != "unknown" else None
+            ) or default_model_for_operator(review_operator)
         venue = resolve_venue_key(args.venue or existing_config["venue"])
         operator = create_operator(
             operator_name,
@@ -227,11 +275,24 @@ def main() -> int:
             ui=ui,
             stage_timeout=args.stage_timeout,
         )
+        reviewer = None
+        if approval_mode == "agent":
+            reviewer = create_reviewer(
+                review_operator,
+                model=review_model,
+                fake_mode=args.fake_operator,
+                ui=ui,
+                stage_timeout=args.stage_timeout,
+            )
         manager = ResearchManager(
             project_root=repo_root,
             runs_dir=runs_dir,
             operator=operator,
             ui=ui,
+            reviewer=reviewer,
+            approval_mode=approval_mode,
+            review_operator=review_operator,
+            review_model=review_model,
         )
         return 0 if manager.resume_run(
             run_root,
@@ -243,6 +304,9 @@ def main() -> int:
 
     operator_name = (args.operator or "claude").strip().lower()
     model = args.model or default_model_for_operator(operator_name)
+    approval_mode = "agent" if args.full_auto else (args.approval_mode or "manual")
+    review_operator = (args.review_operator or operator_name).strip().lower()
+    review_model = args.review_model or default_model_for_operator(review_operator)
     venue = resolve_venue_key(args.venue or DEFAULT_VENUE)
     operator = create_operator(
         operator_name,
@@ -251,11 +315,24 @@ def main() -> int:
         ui=ui,
         stage_timeout=args.stage_timeout,
     )
+    reviewer = None
+    if approval_mode == "agent":
+        reviewer = create_reviewer(
+            review_operator,
+            model=review_model,
+            fake_mode=args.fake_operator,
+            ui=ui,
+            stage_timeout=args.stage_timeout,
+        )
     manager = ResearchManager(
         project_root=repo_root,
         runs_dir=runs_dir,
         operator=operator,
         ui=ui,
+        reviewer=reviewer,
+        approval_mode=approval_mode,
+        review_operator=review_operator,
+        review_model=review_model,
     )
 
     goal = args.goal.strip() if args.goal else read_user_goal()

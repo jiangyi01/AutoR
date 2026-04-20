@@ -65,6 +65,25 @@ class UtilsContractTests(unittest.TestCase):
         self.assertEqual(first["created_at"], second["created_at"])
         self.assertEqual(second["operator"], "claude")
 
+    def test_run_config_tracks_approval_settings(self) -> None:
+        paths = self._build_paths()
+
+        ensure_run_config(
+            paths,
+            model="default",
+            operator="codex",
+            venue="nature",
+            approval_mode="agent",
+            review_operator="claude",
+            review_model="opus",
+        )
+        config = load_run_config(paths)
+
+        self.assertEqual(config["operator"], "codex")
+        self.assertEqual(config["approval_mode"], "agent")
+        self.assertEqual(config["review_operator"], "claude")
+        self.assertEqual(config["review_model"], "opus")
+
     def test_stage3_validation_requires_current_execution_data(self) -> None:
         paths = self._build_paths()
         stage = STAGES[2]

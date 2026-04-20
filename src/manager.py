@@ -14,6 +14,7 @@ from .bootstrap import (
     missing_bootstrap_profile_artifacts,
     scan_corpus,
 )
+from .approval_agent import AutomatedReviewer, ReviewDecision
 from .project_bootstrap import (
     format_project_context_for_prompt,
     format_project_scan_for_prompt,
@@ -109,13 +110,23 @@ class ResearchManager:
         operator: OperatorProtocol,
         output_stream: TextIO = sys.stdout,
         ui: TerminalUI | None = None,
+        reviewer: AutomatedReviewer | None = None,
+        approval_mode: str = "manual",
+        review_operator: str | None = None,
+        review_model: str | None = None,
     ) -> None:
         self.project_root = project_root
         self.runs_dir = runs_dir
         self.operator = operator
+        self.reviewer = reviewer
         self.prompt_dir = self.project_root / "src" / "prompts"
         self.output_stream = output_stream
         self.ui = ui or TerminalUI(output_stream=output_stream)
+        self.approval_mode = "agent" if reviewer is not None else "manual"
+        if approval_mode == "manual" and reviewer is None:
+            self.approval_mode = "manual"
+        self.review_operator = review_operator or getattr(reviewer, "backend_name", getattr(operator, "backend_name", "claude"))
+        self.review_model = review_model or getattr(reviewer, "model", getattr(operator, "model", "unknown"))
         self._redo_start_stage: StageSpec | None = None
         self._research_diagram: bool = False
         self._jump_target_stage: StageSpec | None = None
@@ -133,6 +144,7 @@ class ResearchManager:
         self._research_diagram = research_diagram
         paths = self._create_run(user_goal, venue=venue, resources=resources)
         self.ui.show_run_started(paths.run_root.as_posix(), self.operator.model, venue or "default")
+        self._announce_approval_mode()
 
         # Run Claude-driven intake stage unless skipped
         if not skip_intake:
@@ -184,6 +196,9 @@ class ResearchManager:
             model=self.operator.model,
             venue=venue,
             operator=getattr(self.operator, "backend_name", "claude"),
+            approval_mode=self.approval_mode,
+            review_operator=self.review_operator,
+            review_model=self.review_model,
         )
         ensure_run_manifest(paths)
         if not paths.user_input.exists():
@@ -210,6 +225,7 @@ class ResearchManager:
             config["venue"],
             resumed=True,
         )
+        self._announce_approval_mode()
         if start_stage:
             self.ui.show_status(f"Restarting from {start_stage.stage_title}", level="warn")
         return self._run_from_paths(paths, start_stage=start_stage)
@@ -279,6 +295,9 @@ class ResearchManager:
             model=self.operator.model,
             venue=venue,
             operator=getattr(self.operator, "backend_name", "claude"),
+            approval_mode=self.approval_mode,
+            review_operator=self.review_operator,
+            review_model=self.review_model,
         )
         initialize_run_manifest(paths)
         write_artifact_index(paths)
@@ -287,7 +306,13 @@ class ResearchManager:
         append_log_entry(
             paths.logs,
             "run_config",
-            f"Model: {config['model']}\nVenue: {config['venue']}",
+            (
+                f"Model: {config['model']}\n"
+                f"Venue: {config['venue']}\n"
+                f"Approval mode: {config['approval_mode']}\n"
+                f"Review backend: {config['review_operator']}\n"
+                f"Review model: {config['review_model']}"
+            ),
         )
         return paths
 
@@ -397,9 +422,13 @@ class ResearchManager:
 
             # Show output and let user choose (same approval loop as _run_stage)
             suggestions = parse_refinement_suggestions(stage_markdown)
-            self._display_stage_output(stage, stage_markdown)
-            choice = self._ask_choice(suggestions)
-            append_log_entry(paths.logs, f"{stage.slug} attempt {attempt_no} user_choice", f"choice: {choice}")
+            choice, auto_feedback = self._collect_review_decision(
+                paths=paths,
+                stage=stage,
+                attempt_no=attempt_no,
+                stage_markdown=stage_markdown,
+                suggestions=suggestions,
+            )
 
             if choice in {"1", "2", "3"}:
                 selected = suggestions[int(choice) - 1]
@@ -413,7 +442,7 @@ class ResearchManager:
                 continue
 
             if choice == "4":
-                custom_feedback = self._read_multiline_feedback()
+                custom_feedback = auto_feedback or self._read_multiline_feedback()
                 revision_feedback = (
                     "Continue the current stage conversation and improve the existing work. "
                     "Preserve correct completed parts unless the feedback requires changing them. "
@@ -566,9 +595,13 @@ class ResearchManager:
             write_text(result.stage_file_path, stage_markdown)
 
             suggestions = parse_refinement_suggestions(stage_markdown)
-            self._display_stage_output(stage, stage_markdown)
-            choice = self._ask_choice(suggestions)
-            append_log_entry(paths.logs, f"project_bootstrap attempt {attempt_no} user_choice", f"choice: {choice}")
+            choice, auto_feedback = self._collect_review_decision(
+                paths=paths,
+                stage=stage,
+                attempt_no=attempt_no,
+                stage_markdown=stage_markdown,
+                suggestions=suggestions,
+            )
 
             if choice in {"1", "2", "3"}:
                 selected = suggestions[int(choice) - 1]
@@ -582,7 +615,7 @@ class ResearchManager:
                 continue
 
             if choice == "4":
-                custom_feedback = self._read_multiline_feedback()
+                custom_feedback = auto_feedback or self._read_multiline_feedback()
                 revision_feedback = (
                     "Continue the project bootstrap conversation and improve the stage assessments. "
                     "Preserve correct parts unless the feedback requires changing them. "
@@ -715,9 +748,13 @@ class ResearchManager:
             stage_markdown = read_text(result.stage_file_path)
 
             suggestions = parse_refinement_suggestions(stage_markdown)
-            self._display_stage_output(stage, stage_markdown)
-            choice = self._ask_choice(suggestions)
-            append_log_entry(paths.logs, f"bootstrap attempt {attempt_no} user_choice", f"choice: {choice}")
+            choice, auto_feedback = self._collect_review_decision(
+                paths=paths,
+                stage=stage,
+                attempt_no=attempt_no,
+                stage_markdown=stage_markdown,
+                suggestions=suggestions,
+            )
 
             if choice in {"1", "2", "3"}:
                 selected = suggestions[int(choice) - 1]
@@ -731,7 +768,7 @@ class ResearchManager:
                 continue
 
             if choice == "4":
-                custom_feedback = self._read_multiline_feedback()
+                custom_feedback = auto_feedback or self._read_multiline_feedback()
                 revision_feedback = (
                     "Continue the bootstrap conversation and improve the researcher profile. "
                     "Preserve correct parts unless the feedback requires changing them. "
@@ -1228,12 +1265,12 @@ class ResearchManager:
             if revision_delta and attempt_no >= 2:
                 self.ui.show_revision_delta(revision_delta, attempt_no)
             suggestions = parse_refinement_suggestions(stage_markdown)
-            self._display_stage_output(stage, stage_markdown)
-            choice = self._ask_choice(suggestions)
-            append_log_entry(
-                paths.logs,
-                f"{stage.slug} attempt {attempt_no} user_choice",
-                f"choice: {choice}",
+            choice, auto_feedback = self._collect_review_decision(
+                paths=paths,
+                stage=stage,
+                attempt_no=attempt_no,
+                stage_markdown=stage_markdown,
+                suggestions=suggestions,
             )
 
             if choice in {"1", "2", "3"}:
@@ -1248,18 +1285,21 @@ class ResearchManager:
                 continue
 
             if choice == "4":
-                while True:
-                    custom_feedback = self._read_multiline_feedback()
-                    if not custom_feedback.strip().startswith("/"):
-                        break
-                    control_handled = self._handle_stage_control_command(
-                        paths=paths,
-                        stage=stage,
-                        attempt_no=attempt_no,
-                        command_text=custom_feedback,
-                    )
-                    if control_handled is not None:
-                        return control_handled
+                if auto_feedback is not None:
+                    custom_feedback = auto_feedback
+                else:
+                    while True:
+                        custom_feedback = self._read_multiline_feedback()
+                        if not custom_feedback.strip().startswith("/"):
+                            break
+                        control_handled = self._handle_stage_control_command(
+                            paths=paths,
+                            stage=stage,
+                            attempt_no=attempt_no,
+                            command_text=custom_feedback,
+                        )
+                        if control_handled is not None:
+                            return control_handled
                 revision_feedback = (
                     "Continue the current stage conversation and improve the existing work. "
                     "Preserve correct completed parts unless the feedback requires changing them. "
@@ -1482,6 +1522,81 @@ class ResearchManager:
 
     def _read_multiline_feedback(self) -> str:
         return self.ui.read_multiline_feedback()
+
+    def _announce_approval_mode(self) -> None:
+        if self.reviewer is None:
+            self.ui.show_status("Approval mode: manual human gate.", level="info")
+            return
+        self.ui.show_status(
+            (
+                "Approval mode: automated reviewer gate "
+                f"({self.review_operator}/{self.review_model})."
+            ),
+            level="warn",
+        )
+
+    def _collect_review_decision(
+        self,
+        *,
+        paths: RunPaths,
+        stage: StageSpec,
+        attempt_no: int,
+        stage_markdown: str,
+        suggestions: list[str],
+    ) -> tuple[str, str | None]:
+        self._display_stage_output(stage, stage_markdown)
+        if self.reviewer is None:
+            choice = self._ask_choice(suggestions)
+            append_log_entry(paths.logs, f"{stage.slug} attempt {attempt_no} user_choice", f"choice: {choice}")
+            return choice, None
+
+        self.ui.show_status(
+            f"Automated reviewer is auditing {stage.stage_title}...",
+            level="info",
+        )
+        decision = self.reviewer.review_stage(
+            paths=paths,
+            stage=stage,
+            attempt_no=attempt_no,
+            stage_markdown=stage_markdown,
+            suggestions=suggestions,
+        )
+        self._render_review_decision(decision)
+        log_body = [
+            f"mode: automated",
+            f"backend: {self.review_operator}",
+            f"model: {self.review_model}",
+            f"choice: {decision.choice}",
+            f"decision_token: {decision.decision_token}",
+        ]
+        if decision.reason:
+            log_body.append(f"reason: {decision.reason}")
+        if decision.feedback:
+            log_body.append(f"feedback:\n{decision.feedback}")
+        if decision.raw_response:
+            log_body.append("raw_response_excerpt:\n" + truncate_text(decision.raw_response, max_chars=2000))
+        append_log_entry(paths.logs, f"{stage.slug} attempt {attempt_no} reviewer_choice", "\n".join(log_body))
+        return decision.choice, decision.feedback or None
+
+    def _render_review_decision(self, decision: ReviewDecision) -> None:
+        label_map = {
+            "1": "Use suggestion 1",
+            "2": "Use suggestion 2",
+            "3": "Use suggestion 3",
+            "4": "Refine with custom feedback",
+            "5": "Approve and continue",
+            "6": "Abort",
+        }
+        body = [
+            f"Backend  : {self.review_operator}",
+            f"Model    : {self.review_model}",
+            f"Decision : {label_map.get(decision.choice, decision.choice)}",
+        ]
+        if decision.reason:
+            body.append(f"Reason   : {decision.reason}")
+        if decision.feedback:
+            body.extend(["", "Feedback:"] + decision.feedback.splitlines())
+        self.ui.panel("Automated Reviewer", body, color=self.ui.FG_MAGENTA)
 
     def _materialize_missing_stage_draft(
         self,

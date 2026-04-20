@@ -374,6 +374,33 @@ python main.py \
 - 新建 run 时，如果你不写 `--model`，Claude 默认是 `sonnet`，Codex 默认是 `default`
 - 恢复旧 run 时，AutoR 默认会保留这个 run 原来的 backend、model 和 venue；只有你显式指定新值时才会覆盖
 
+如果你想启用“全自动审批模式”，也就是不再等待你手动点 1~6，而是接入一个严格的模拟人类 reviewer agent，可以这样跑：
+
+```bash
+python main.py \
+  --operator claude \
+  --model sonnet \
+  --full-auto \
+  --goal "..."
+```
+
+如果你希望“执行 agent”和“审批 reviewer”分开，也可以单独指定 reviewer 的 backend：
+
+```bash
+python main.py \
+  --operator codex \
+  --model default \
+  --full-auto \
+  --review-operator claude \
+  --review-model opus \
+  --goal "..."
+```
+
+这里要明确两点：
+
+- `--full-auto` **不会改变主体科研流程**，只是把原来等待人工审批的地方，替换成一个严格的 reviewer agent
+- 真正重要、要出高质量成果的研究，仍然推荐默认的人类审批模式；`--full-auto` 更适合夜间 unattended run、批量 dry run、流程压测或长任务巡航
+
 ### 7.2 推荐同时指定投稿 venue
 
 如果你已经知道目标风格，建议一开始就指定：

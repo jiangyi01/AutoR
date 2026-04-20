@@ -140,6 +140,42 @@ class CliSmokeTests(unittest.TestCase):
             self.assertEqual(config["operator"], "codex")
             self.assertEqual(config["model"], "default")
 
+    def test_cli_full_auto_persists_automated_approval_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runs_dir = Path(tmp_dir) / "runs"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "main.py",
+                    "--fake-operator",
+                    "--operator",
+                    "codex",
+                    "--full-auto",
+                    "--review-operator",
+                    "claude",
+                    "--review-model",
+                    "opus",
+                    "--goal",
+                    "CLI full-auto smoke goal",
+                    "--runs-dir",
+                    str(runs_dir),
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertEqual(result.returncode, 1, msg=result.stderr)
+            run_roots = sorted(path for path in runs_dir.iterdir() if path.is_dir())
+            self.assertEqual(len(run_roots), 1)
+            config = load_run_config(build_run_paths(run_roots[0]))
+            self.assertEqual(config["operator"], "codex")
+            self.assertEqual(config["approval_mode"], "agent")
+            self.assertEqual(config["review_operator"], "claude")
+            self.assertEqual(config["review_model"], "opus")
+            self.assertIn("Approval mode: automated reviewer gate", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
